@@ -124,3 +124,18 @@ func (e *ErrorInfo) JSON() string {
 func (e *ErrorInfo) Fatal() {
 	log.Fatal(e.Error())
 }
+
+func IsNil(e any) bool {
+	switch v := e.(type) {
+	case *ErrorInfo:
+		return v.IsNil()
+	case error:
+		return v == nil
+	default:
+		return e == nil
+	}
+}
+
+func IsNonNil(e any) bool {
+	return !IsNil(e)
+}
