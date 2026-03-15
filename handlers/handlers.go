@@ -3,7 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	e "shared/errors"
+	e "github.com/ChatDetectiveORG/shared/errors"
 	"time"
 
 	amqp "github.com/rabbitmq/amqp091-go"

@@ -2,7 +2,7 @@ package handlers
 
 import (
 	"context"
-	e "shared/errors"
+	e "github.com/ChatDetectiveORG/shared/errors"
 	"time"
 
 	tele "gopkg.in/telebot.v4"
