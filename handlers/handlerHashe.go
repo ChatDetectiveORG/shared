@@ -1,23 +1,23 @@
 package handlers
 
-type handlerChainHashe struct {
-	args map[string]any
+type HandlerChainHashe struct {
+	args      map[string]any
 	responses []handlerResponse
 }
 
-func (hch handlerChainHashe) Init() *handlerChainHashe {
-	return &handlerChainHashe{
+func (hch HandlerChainHashe) Init() *HandlerChainHashe {
+	return &HandlerChainHashe{
 		args: make(map[string]any),
 	}
 }
 
-func (hch *handlerChainHashe) Add(name string, value interface{}) *handlerChainHashe {
+func (hch *HandlerChainHashe) Add(name string, value interface{}) *HandlerChainHashe {
 	hch.args[name] = value
 
-	return  hch
+	return hch
 }
 
-func (hch *handlerChainHashe) Get(name string) (interface{}, bool) {
+func (hch *HandlerChainHashe) Get(name string) (interface{}, bool) {
 	v, exists := hch.args[name]
 
 	if !exists {
@@ -27,13 +27,13 @@ func (hch *handlerChainHashe) Get(name string) (interface{}, bool) {
 	return v, true
 }
 
-func (hch *handlerChainHashe) AddResponse(response handlerResponse) *handlerChainHashe {
+func (hch *HandlerChainHashe) AddResponse(response handlerResponse) *HandlerChainHashe {
 	hch.responses = append(hch.responses, response)
 
 	return hch
 }
 
-func (hch *handlerChainHashe) Trunc() *handlerChainHashe {
+func (hch *HandlerChainHashe) Trunc() *HandlerChainHashe {
 	clear(hch.args)
 
 	return hch

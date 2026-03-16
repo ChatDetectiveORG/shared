@@ -2,46 +2,48 @@ package handlers
 
 import (
 	"context"
-	e "github.com/ChatDetectiveORG/shared/errors"
 	"time"
+
+	e "github.com/ChatDetectiveORG/shared/errors"
 
 	tele "gopkg.in/telebot.v4"
 )
 
-type chainHandlerFunc func(u tele.Update, hashe *handlerChainHashe) *e.ErrorInfo
+type chainHandlerFunc func(u tele.Update, hashe *HandlerChainHashe) *e.ErrorInfo
 type executionType string
+
 const (
-	endOnError executionType = "endOnError"
-	skipOnError executionType = "skipOnError"
+	EndOnError  executionType = "endOnError"
+	SkipOnError executionType = "skipOnError"
 )
 
 type chainHandler struct {
-	function chainHandlerFunc
+	function    chainHandlerFunc
 	middlewares []chainHandler
-	exectype executionType
+	exectype    executionType
 }
 
 func InitChainHandler(function chainHandlerFunc, exectype executionType, middlewares ...chainHandler) chainHandler {
 	return chainHandler{
-		function: function,
-		exectype: exectype,
+		function:    function,
+		exectype:    exectype,
 		middlewares: middlewares,
 	}
 }
 
-func (ch chainHandler) Exec(u tele.Update, hashe *handlerChainHashe) *e.ErrorInfo {
+func (ch chainHandler) Exec(u tele.Update, hashe *HandlerChainHashe) *e.ErrorInfo {
 	if ch.middlewares != nil {
 		for _, middleware := range ch.middlewares {
 			errInfo := middleware.Exec(u, hashe)
 
-			if !errInfo.IsNil() && middleware.exectype == endOnError {
+			if !errInfo.IsNil() && middleware.exectype == EndOnError {
 				return errInfo.PushStack()
 			}
 		}
 	}
 
 	errInfo := ch.function(u, hashe)
-	if !errInfo.IsNil() && ch.exectype == endOnError {
+	if !errInfo.IsNil() && ch.exectype == EndOnError {
 		return errInfo
 	}
 
@@ -49,17 +51,17 @@ func (ch chainHandler) Exec(u tele.Update, hashe *handlerChainHashe) *e.ErrorInf
 }
 
 type HandlerChain struct {
-	Handlers      []chainHandler
-	Hashe         *handlerChainHashe
-	ErrorInfo     *e.ErrorInfo
-	timeout       time.Duration
+	Handlers  []chainHandler
+	Hashe     *HandlerChainHashe
+	ErrorInfo *e.ErrorInfo
+	timeout   time.Duration
 }
 
 func (hc HandlerChain) Init(timeout time.Duration, handlers ...chainHandler) *HandlerChain {
 	new := HandlerChain{
 		Handlers: handlers,
 		timeout:  timeout,
-		Hashe:    handlerChainHashe{}.Init(),
+		Hashe:    HandlerChainHashe{}.Init(),
 	}
 
 	return &new
