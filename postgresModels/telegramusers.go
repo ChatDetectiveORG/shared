@@ -21,8 +21,6 @@ type Telegramuser struct {
 	Fullname string
 	Username string
 
-	IsBotPeer bool `pg:"is_bot_peer,default:false"`
-
 	Metadata *tele.User `pg:"metadata,type:jsonb"`
 }
 
@@ -44,7 +42,7 @@ func (t *Telegramuser) get(db orm.DB, userID int64) error {
 	return e.Nil()
 }
 
-func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User, interactedWithBot bool) error {
+func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) error {
 	err := t.get(tx, tguser.ID)
 	if e.IsNil(err) {
 		return nil
@@ -54,7 +52,6 @@ func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User, interactedWithB
 		ID:       Int64ToHash(tguser.ID),
 		Fullname: tguser.FirstName + " " + tguser.LastName,
 		Username: tguser.Username,
-		IsBotPeer: interactedWithBot,
 		Metadata: tguser,
 	}
 
