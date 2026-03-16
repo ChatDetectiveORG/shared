@@ -1,9 +1,7 @@
 package postgresmodels
 
 import (
-	"crypto/sha256"
-	"encoding/hex"
-	"fmt"
+	u "github.com/ChatDetectiveORG/shared/utils"
 	"time"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
@@ -24,17 +22,8 @@ type Telegramuser struct {
 	Metadata *tele.User `pg:"metadata,type:jsonb"`
 }
 
-// Unique, non-decodable int64 hash generator
-func Int64ToHash(id int64) string {
-	data := []byte(fmt.Sprintf("%d", id))
-
-	hash := sha256.Sum256(data)
-
-	return hex.EncodeToString(hash[:32])
-}
-
 func (t *Telegramuser) get(db orm.DB, userID int64) error {
-	err := db.Model(t).Where("id = ?", Int64ToHash(userID)).Select()
+	err := db.Model(t).Where("id = ?", u.Int64ToHash(userID)).Select()
 	if e.IsNonNil(err) {
 		return e.FromError(err, "error getting telegram user")
 	}
@@ -49,7 +38,7 @@ func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) error {
 	}
 
 	user := &Telegramuser{
-		ID:       Int64ToHash(tguser.ID),
+		ID:       u.Int64ToHash(tguser.ID),
 		Fullname: tguser.FirstName + " " + tguser.LastName,
 		Username: tguser.Username,
 		Metadata: tguser,
