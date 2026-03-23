@@ -5,6 +5,12 @@ type HandlerChainHashe struct {
 	responses []handlerResponse
 }
 
+func (hch *HandlerChainHashe) Set(name string, value interface{}) *HandlerChainHashe {
+	hch.args[name] = value
+
+	return hch
+}
+
 func (hch HandlerChainHashe) Init() *HandlerChainHashe {
 	return &HandlerChainHashe{
 		args: make(map[string]any),
