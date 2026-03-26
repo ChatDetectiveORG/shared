@@ -76,16 +76,3 @@ func extractInputtable(msg *tele.Message) tele.Inputtable {
 		return nil
 	}
 }
-
-// GroupMessagesByAlbumID groups messages by their media_group_id.
-// Returns a map: albumID -> messages. Messages without AlbumID are not included.
-func GroupMessagesByAlbumID(msgs []*tele.Message) map[string][]*tele.Message {
-	groups := make(map[string][]*tele.Message)
-	for _, msg := range msgs {
-		if msg == nil || msg.AlbumID == "" {
-			continue
-		}
-		groups[msg.AlbumID] = append(groups[msg.AlbumID], msg)
-	}
-	return groups
-}
