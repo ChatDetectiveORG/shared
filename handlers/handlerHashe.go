@@ -1,20 +1,25 @@
 package handlers
 
+import "github.com/google/uuid"
+
 type HandlerChainHashe struct {
 	args      map[string]any
-	responses []handlerResponse
-}
-
-func (hch *HandlerChainHashe) Set(name string, value interface{}) *HandlerChainHashe {
-	hch.args[name] = value
-
-	return hch
+	SendChannel chan *HandlerResponse
+	SendResultChannel chan *SendResult
+	ChainID string
 }
 
 func (hch HandlerChainHashe) Init() *HandlerChainHashe {
 	return &HandlerChainHashe{
 		args: make(map[string]any),
+		SendChannel: make(chan *HandlerResponse),
+		SendResultChannel: make(chan *SendResult),
+		ChainID: uuid.New().String(),
 	}
+}
+
+func (hch *HandlerChainHashe) SendToChannel(handlerResponse *HandlerResponse) {
+	hch.SendChannel <- handlerResponse.WithChainID(hch.ChainID)
 }
 
 func (hch *HandlerChainHashe) Add(name string, value interface{}) *HandlerChainHashe {
@@ -31,12 +36,6 @@ func (hch *HandlerChainHashe) Get(name string) (interface{}, bool) {
 	}
 
 	return v, true
-}
-
-func (hch *HandlerChainHashe) AddResponse(response handlerResponse) *HandlerChainHashe {
-	hch.responses = append(hch.responses, response)
-
-	return hch
 }
 
 func (hch *HandlerChainHashe) Trunc() *HandlerChainHashe {

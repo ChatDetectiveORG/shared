@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
@@ -53,11 +54,12 @@ func (ch chainHandler) Exec(u tele.Update, hashe *HandlerChainHashe) *e.ErrorInf
 type HandlerChain struct {
 	Handlers  []chainHandler
 	Hashe     *HandlerChainHashe
-	ErrorInfo *e.ErrorInfo
 	timeout   time.Duration
+
+	wg *sync.WaitGroup
 }
 
-func (hc HandlerChain) Init(timeout time.Duration, handlers ...chainHandler) *HandlerChain {
+func (hc HandlerChain) Init(timeout time.Duration, handlers ...chainHandler) *HandlerChain {	
 	new := HandlerChain{
 		Handlers: handlers,
 		timeout:  timeout,
@@ -67,26 +69,33 @@ func (hc HandlerChain) Init(timeout time.Duration, handlers ...chainHandler) *Ha
 	return &new
 }
 
-func (hc *HandlerChain) Run(u tele.Update) ([]handlerResponse, *e.ErrorInfo) {
+func (hc *HandlerChain) WithWaitGroup(wg *sync.WaitGroup) *HandlerChain {
+	hc.wg = wg
+	return hc
+}
+
+func (hc *HandlerChain) Run(u tele.Update) *e.ErrorInfo {
 	ctx, cancel := context.WithTimeout(context.Background(), hc.timeout)
 	defer cancel()
 
 	done := make(chan *e.ErrorInfo, 1)
 
+	hc.wg.Add(1)
 	go func() {
+		defer hc.wg.Done()
+
 		for _, handler := range hc.Handlers {
 			select {
 			case <-ctx.Done():
-				hc.ErrorInfo = e.FromError(ctx.Err(), "Context cancelled")
-				done <- hc.ErrorInfo
+				err := e.FromError(ctx.Err(), "Context cancelled")
+				done <- err
 				return
 			default:
 			}
 
-			errInfo := handler.Exec(u, hc.Hashe)
-			if !errInfo.IsNil() {
-				hc.ErrorInfo = errInfo
-				done <- hc.ErrorInfo
+			err := handler.Exec(u, hc.Hashe)
+			if !err.IsNil() {
+				done <- err
 				return
 			}
 		}
@@ -97,11 +106,10 @@ func (hc *HandlerChain) Run(u tele.Update) ([]handlerResponse, *e.ErrorInfo) {
 	select {
 	case err := <-done:
 		if err.IsNil() || err.Severity == e.Ingnored {
-			return hc.Hashe.responses, nil
+			return nil
 		}
-		return hc.Hashe.responses, err.PushStack()
+		return err.PushStack()
 	case <-ctx.Done():
-		hc.ErrorInfo = e.FromError(ctx.Err(), "Context timeout")
-		return hc.Hashe.responses, hc.ErrorInfo
+		return e.FromError(ctx.Err(), "Context timeout")
 	}
 }
