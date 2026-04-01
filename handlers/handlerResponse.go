@@ -5,25 +5,11 @@ import (
 	tele "gopkg.in/telebot.v4"
 )
 
-type HandlerResponse struct {
-	ToSend *tele.Message     `json:"to_send"`
-	SenderBot string         `json:"sender_bot"`
-	FromPodID string         `json:"from_pod_id"`
-	ChainID   string         `json:"chain_id"`
-	// Если false, не будут возвращаться объекты отправленных сообщений
-	//
-	// Ошибки отправки возвращаются ВСЕГДА
-	ReturnSendResult bool `json:"return_send_result"`
-}
-
-func (hr *HandlerResponse) WithChainID(chainID string) *HandlerResponse {
-	hr.ChainID = chainID
-	return hr
-}
-
+// SendResult — ответ message-sender (или аналога) после попытки отправки в Telegram.
+// CorrelationID должен совпадать с тем, что ушло в AMQP CorrelationId при Publish.
 type SendResult struct {
-	SentMessage *tele.Message `json:"message"`
-	Error   *e.ErrorInfo      `json:"error"`
-	IsSuccess bool            `json:"is_success"`
-	ChainID   string         `json:"chain_id"`
+	CorrelationID string          `json:"correlation_id"`
+	SentMessage   *tele.Message   `json:"message"`
+	Error         *e.ErrorInfo    `json:"error"`
+	IsSuccess     bool            `json:"is_success"`
 }

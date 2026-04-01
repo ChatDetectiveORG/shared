@@ -6,6 +6,7 @@ import (
 	"time"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
+	"github.com/google/uuid"
 
 	tele "gopkg.in/telebot.v4"
 )
@@ -36,7 +37,6 @@ func (ch chainHandler) Exec(u tele.Update, hashe *HandlerChainHashe) *e.ErrorInf
 	if ch.middlewares != nil {
 		for _, middleware := range ch.middlewares {
 			errInfo := middleware.Exec(u, hashe)
-
 			if !errInfo.IsNil() && middleware.exectype == EndOnError {
 				return errInfo.PushStack()
 			}
@@ -52,21 +52,22 @@ func (ch chainHandler) Exec(u tele.Update, hashe *HandlerChainHashe) *e.ErrorInf
 }
 
 type HandlerChain struct {
-	Handlers  []chainHandler
-	Hashe     *HandlerChainHashe
-	timeout   time.Duration
+	Handlers []chainHandler
+	Hashe    *HandlerChainHashe
+	timeout  time.Duration
+	ChainID  string
 
 	wg *sync.WaitGroup
 }
 
-func (hc HandlerChain) Init(timeout time.Duration, handlers ...chainHandler) *HandlerChain {	
-	new := HandlerChain{
+func (hc HandlerChain) Init(timeout time.Duration, handlers ...chainHandler) *HandlerChain {
+	n := HandlerChain{
 		Handlers: handlers,
 		timeout:  timeout,
-		Hashe:    HandlerChainHashe{}.Init(),
+		Hashe:    nil,
+		ChainID:  uuid.New().String(),
 	}
-
-	return &new
+	return &n
 }
 
 func (hc *HandlerChain) WithWaitGroup(wg *sync.WaitGroup) *HandlerChain {
@@ -74,21 +75,20 @@ func (hc *HandlerChain) WithWaitGroup(wg *sync.WaitGroup) *HandlerChain {
 	return hc
 }
 
-func (hc *HandlerChain) Run(u tele.Update) *e.ErrorInfo {
+func (hc *HandlerChain) Run(u tele.Update, jobs chan *publishEnvelope, waiters *sync.Map) *e.ErrorInfo {
 	ctx, cancel := context.WithTimeout(context.Background(), hc.timeout)
 	defer cancel()
 
+	runID := uuid.New().String()
+	hc.Hashe = HandlerChainHashe{}.Init(jobs, waiters, runID)
+
 	done := make(chan *e.ErrorInfo, 1)
 
-	hc.wg.Add(1)
-	go func() {
-		defer hc.wg.Done()
-
+	runHandlers := func() {
 		for _, handler := range hc.Handlers {
 			select {
 			case <-ctx.Done():
-				err := e.FromError(ctx.Err(), "Context cancelled")
-				done <- err
+				done <- e.FromError(ctx.Err(), "context cancelled")
 				return
 			default:
 			}
@@ -99,17 +99,22 @@ func (hc *HandlerChain) Run(u tele.Update) *e.ErrorInfo {
 				return
 			}
 		}
-
 		done <- e.Nil()
+	}
+
+	hc.wg.Add(1)
+	go func() {
+		defer hc.wg.Done()
+		runHandlers()
 	}()
 
 	select {
 	case err := <-done:
 		if err.IsNil() || err.Severity == e.Ingnored {
-			return nil
+			return e.Nil()
 		}
 		return err.PushStack()
 	case <-ctx.Done():
-		return e.FromError(ctx.Err(), "Context timeout")
+		return e.FromError(ctx.Err(), "handler chain timeout")
 	}
 }

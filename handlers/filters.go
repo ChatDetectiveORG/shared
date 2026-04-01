@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"strings"
+
 	tele "gopkg.in/telebot.v4"
 )
 
-type filter interface {
+// UpdateFilter ограничивает обработку endpoint-ом только подходящими апдейтами.
+type UpdateFilter interface {
 	Filter(update tele.Update) bool
 }
 
@@ -35,7 +37,7 @@ func (c *commandFilter) Filter(update tele.Update) bool {
 	return false
 }
 
-func Command(command []string) filter {
+func Command(command []string) UpdateFilter {
 	return &commandFilter{
 		commands: command,
 	}
@@ -55,7 +57,7 @@ func (t *textCommand) Filter(update tele.Update) bool {
 	return strings.Contains(update.Message.Text, t.matchString)
 }
 
-func TextCommand(matchString string) filter {
+func TextCommand(matchString string) UpdateFilter {
 	return &textCommand{
 		matchString: matchString,
 	}
@@ -76,7 +78,7 @@ func (c *callbackQueryJSON) Filter(update tele.Update) bool {
 	return strings.Contains(update.Callback.Data, c.matchCallbackDataArg) && strings.Contains(update.Callback.Data, c.matchCallbackDataKey)
 }
 
-func CallbackQueryJSON(matchCallbackDataArg string, matchCallbackDataKey string) filter {
+func CallbackQueryJSON(matchCallbackDataArg string, matchCallbackDataKey string) UpdateFilter {
 	return &callbackQueryJSON{
 		matchCallbackDataArg: matchCallbackDataArg,
 		matchCallbackDataKey: matchCallbackDataKey,
@@ -86,7 +88,7 @@ func CallbackQueryJSON(matchCallbackDataArg string, matchCallbackDataKey string)
 type busEventType string
 
 const (
-	BusEventTypeNew busEventType = "new"
+	BusEventTypeNew    busEventType = "new"
 	BusEventTypeEdited busEventType = "edited"
 	BusEventTypeDeleted busEventType = "deleted"
 )
@@ -108,18 +110,17 @@ func (b *businessEvent) Filter(update tele.Update) bool {
 	}
 }
 
-func BusinessEvent(acceptedTypes busEventType) filter {
+func BusinessEvent(acceptedTypes busEventType) UpdateFilter {
 	return &businessEvent{
 		types: acceptedTypes,
 	}
 }
 
 type filterChain struct {
-	filters  []filter
+	filters  []UpdateFilter
 	operator string
 }
 
-// SUS Function
 func (f *filterChain) Filter(update tele.Update) bool {
 	for _, filter := range f.filters {
 		if !filter.Filter(update) {
@@ -138,14 +139,14 @@ func (f *filterChain) Filter(update tele.Update) bool {
 	return f.operator == "and"
 }
 
-func And(filters ...filter) filter {
+func And(filters ...UpdateFilter) UpdateFilter {
 	return &filterChain{
 		filters:  filters,
 		operator: "and",
 	}
 }
 
-func Or(filters ...filter) filter {
+func Or(filters ...UpdateFilter) UpdateFilter {
 	return &filterChain{
 		filters:  filters,
 		operator: "or",
