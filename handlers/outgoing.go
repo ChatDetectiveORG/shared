@@ -114,6 +114,11 @@ func (r *Router) startPublishLoop(wg *sync.WaitGroup, ep *Endpoint, ctx context.
 				continue
 			}
 			pubCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			resultRoutingKey := "unknown.q00"
+			if r.PodID != "" {
+				// sendWaiters is shared across router, so a stable return shard is enough.
+				resultRoutingKey = fmt.Sprintf("%s.q%02d", r.PodID, 0)
+			}
 			publishErr := ep.rabbitmqChannel.PublishWithContext(
 				pubCtx,
 				ep.outExchange,
@@ -125,7 +130,8 @@ func (r *Router) startPublishLoop(wg *sync.WaitGroup, ep *Endpoint, ctx context.
 					CorrelationId: job.correlationID,
 					Body:          job.body,
 					Headers: amqp.Table{
-						"correlation_id": job.correlationID,
+						"correlation_id":    job.correlationID,
+						"result_routing_key": resultRoutingKey,
 					},
 				},
 			)

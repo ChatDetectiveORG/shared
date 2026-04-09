@@ -77,6 +77,7 @@ func (r *Router) InitSharding(podID string, wg *sync.WaitGroup, ctx context.Cont
 	defer r.mu.Unlock()
 	r.wg = wg
 	r.ctx = ctx
+	r.PodID = podID
 	if r.ReplicaCount <= 0 {
 		return
 	}
