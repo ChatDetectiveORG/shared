@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -119,6 +120,7 @@ func (r *Router) startPublishLoop(wg *sync.WaitGroup, ep *Endpoint, ctx context.
 				// sendWaiters is shared across router, so a stable return shard is enough.
 				resultRoutingKey = fmt.Sprintf("%s.q%02d", r.PodID, 0)
 			}
+			log.Printf("trace=%s handlers.publish outgoing_exchange=%s outgoing_rk=%s result_rk=%s", job.correlationID, ep.outExchange, job.routingKey, resultRoutingKey)
 			publishErr := ep.rabbitmqChannel.PublishWithContext(
 				pubCtx,
 				ep.outExchange,
@@ -138,6 +140,11 @@ func (r *Router) startPublishLoop(wg *sync.WaitGroup, ep *Endpoint, ctx context.
 			cancel()
 			if publishErr != nil && r.ErrorChannel != nil {
 				r.ErrorChannel <- e.FromError(publishErr, "publish tele.Message").WithSeverity(e.Critical).PushStack()
+			}
+			if publishErr != nil {
+				log.Printf("trace=%s handlers.publish_error exchange=%s rk=%s err=%v", job.correlationID, ep.outExchange, job.routingKey, publishErr)
+			} else {
+				log.Printf("trace=%s handlers.publish_ok outgoing_exchange=%s outgoing_rk=%s", job.correlationID, ep.outExchange, job.routingKey)
 			}
 		}
 	}()
@@ -169,6 +176,7 @@ func (r *Router) startSendResultConsumer(wg *sync.WaitGroup, queueName string, c
 
 			var sr SendResult
 			if uerr := json.Unmarshal(delivery.Body, &sr); uerr != nil {
+				log.Printf("trace=%s handlers.result_unmarshal_error queue=%s rk=%s err=%v", delivery.CorrelationId, queueName, delivery.RoutingKey, uerr)
 				if r.ErrorChannel != nil {
 					r.ErrorChannel <- e.FromError(uerr, "unmarshal SendResult").WithSeverity(e.Critical).PushStack()
 				}
@@ -179,17 +187,24 @@ func (r *Router) startSendResultConsumer(wg *sync.WaitGroup, queueName string, c
 			if corr == "" {
 				corr = delivery.CorrelationId
 			}
+			log.Printf("trace=%s handlers.result_received queue=%s rk=%s success=%t", corr, queueName, delivery.RoutingKey, sr.IsSuccess)
 			if corr == "" {
+				log.Printf("trace=missing handlers.result_missing_correlation queue=%s rk=%s", queueName, delivery.RoutingKey)
 				_ = delivery.Ack(false)
 				continue
 			}
 			if v, ok := r.sendWaiters.LoadAndDelete(corr); ok {
 				if ch, ok := v.(chan *SendResult); ok {
+					log.Printf("trace=%s handlers.result_waiter_found queue=%s", corr, queueName)
 					select {
 					case ch <- &sr:
+						log.Printf("trace=%s handlers.result_delivered_to_waiter queue=%s", corr, queueName)
 					default:
+						log.Printf("trace=%s handlers.result_waiter_channel_full queue=%s", corr, queueName)
 					}
 				}
+			} else {
+				log.Printf("trace=%s handlers.result_waiter_missing queue=%s", corr, queueName)
 			}
 			_ = delivery.Ack(false)
 		}

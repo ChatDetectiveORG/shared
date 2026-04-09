@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"log"
 	"sync"
 	"time"
 
@@ -48,6 +49,7 @@ func (hch *HandlerChainHashe) Emit(routingKey string, msg *tele.Message) *e.Erro
 		return e.FromError(err, "marshal tele.Message").WithSeverity(e.Critical)
 	}
 	corr := uuid.New().String()
+	log.Printf("trace=%s handlers.emit rk=%s", corr, routingKey)
 	select {
 	case hch.jobs <- &publishEnvelope{
 		routingKey:    routingKey,
@@ -77,8 +79,10 @@ func (hch *HandlerChainHashe) EmitWait(ctx context.Context, routingKey string, m
 	corr := uuid.New().String()
 	replyCh := make(chan *SendResult, 1)
 	hch.waiters.Store(corr, replyCh)
+	log.Printf("trace=%s handlers.emit_wait_store_waiter rk=%s run_id=%s", corr, routingKey, hch.runID)
 	defer func() {
 		hch.waiters.Delete(corr)
+		log.Printf("trace=%s handlers.emit_wait_cleanup_waiter run_id=%s", corr, hch.runID)
 	}()
 
 	select {
@@ -87,6 +91,7 @@ func (hch *HandlerChainHashe) EmitWait(ctx context.Context, routingKey string, m
 		body:          body,
 		correlationID: corr,
 	}:
+		log.Printf("trace=%s handlers.emit_wait_enqueued rk=%s", corr, routingKey)
 	case <-ctx.Done():
 		return nil, e.FromError(ctx.Err(), "enqueue publish").WithSeverity(e.Warning)
 	default:
@@ -98,6 +103,7 @@ func (hch *HandlerChainHashe) EmitWait(ctx context.Context, routingKey string, m
 
 	select {
 	case sr := <-replyCh:
+		log.Printf("trace=%s handlers.emit_wait_got_result success=%t", corr, sr != nil && sr.IsSuccess)
 		if sr == nil {
 			return nil, e.NewError("empty send result", "EmitWait").WithSeverity(e.Warning)
 		}
@@ -109,6 +115,7 @@ func (hch *HandlerChainHashe) EmitWait(ctx context.Context, routingKey string, m
 		}
 		return sr.SentMessage, e.Nil()
 	case <-waitCtx.Done():
+		log.Printf("trace=%s handlers.emit_wait_timeout", corr)
 		return nil, e.FromError(waitCtx.Err(), "wait send result").WithSeverity(e.Warning)
 	}
 }
