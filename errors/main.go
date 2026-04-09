@@ -113,6 +113,41 @@ func (e *ErrorInfo) MarshalJSON() ([]byte, error) {
 	})
 }
 
+// UnmarshalJSON поддерживает обратную десериализацию поля err из строки.
+func (e *ErrorInfo) UnmarshalJSON(data []byte) error {
+	type Alias ErrorInfo
+	aux := &struct {
+		*Alias
+		Err any `json:"err"`
+	}{
+		Alias: (*Alias)(e),
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	switch v := aux.Err.(type) {
+	case nil:
+		e.Err = nil
+	case string:
+		if v == "" {
+			e.Err = nil
+		} else {
+			e.Err = errors.New(v)
+		}
+	default:
+		b, err := json.Marshal(v)
+		if err != nil {
+			e.Err = errors.New("unknown error payload")
+			return nil
+		}
+		e.Err = errors.New(string(b))
+	}
+
+	return nil
+}
+
 func (e *ErrorInfo) JSON() string {
 	json, err := json.MarshalIndent(e, "", "  ")
 	if err != nil {

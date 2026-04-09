@@ -180,7 +180,8 @@ func (r *Router) startSendResultConsumer(wg *sync.WaitGroup, queueName string, c
 				if r.ErrorChannel != nil {
 					r.ErrorChannel <- e.FromError(uerr, "unmarshal SendResult").WithSeverity(e.Critical).PushStack()
 				}
-				_ = delivery.Nack(false, true)
+				// Poison message: retry won't change payload, so avoid infinite requeue loop.
+				_ = delivery.Nack(false, false)
 				continue
 			}
 			corr := sr.CorrelationID
