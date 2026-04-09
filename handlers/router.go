@@ -32,6 +32,7 @@ type Router struct {
 
 	outgoingMu          sync.Mutex
 	outgoingStarted     bool
+	sendResultConsumers map[int]bool
 	sendWaiters         *sync.Map
 	outgoingExchange   string
 	sendResultExchange string

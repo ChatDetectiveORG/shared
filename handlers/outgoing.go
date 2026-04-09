@@ -24,8 +24,8 @@ type publishEnvelope struct {
 	correlationID string
 }
 
-// StartOutgoing поднимает цикл публикации для каждого endpoint и один consumer очереди результатов
-// на шард (demux по correlation_id). Повторные вызовы безопасны (no-op).
+// StartOutgoing поднимает publish loop один раз и consumer очереди результатов для каждого shardID.
+// Повторные вызовы безопасны.
 func (r *Router) StartOutgoing(wg *sync.WaitGroup, podID string, shardID int, ctx context.Context) *e.ErrorInfo {
 	if r == nil {
 		return e.NewError("router is nil", "StartOutgoing").WithSeverity(e.Critical)
@@ -36,25 +36,41 @@ func (r *Router) StartOutgoing(wg *sync.WaitGroup, podID string, shardID int, ct
 
 	r.outgoingMu.Lock()
 	defer r.outgoingMu.Unlock()
-	if r.outgoingStarted {
+
+	if !r.outgoingStarted {
+		outEx := r.OutgoingExchange
+		if outEx == "" {
+			outEx = defaultOutgoingExchange
+		}
+		inEx := r.SendResultExchange
+		if inEx == "" {
+			inEx = defaultSendResultExchange
+		}
+
+		r.sendWaiters = &sync.Map{}
+		r.outgoingExchange = outEx
+		r.sendResultExchange = inEx
+
+		for i := range r.Endpoints {
+			ep := &r.Endpoints[i]
+			ep.jobs = make(chan *publishEnvelope, 256)
+			ep.outExchange = outEx
+			ep.rabbitmqChannel = r.RabbitmqChannel
+			r.startPublishLoop(wg, ep, ctx)
+		}
+
+		r.sendResultConsumers = map[int]bool{}
+		r.outgoingStarted = true
+	}
+
+	if r.sendResultConsumers == nil {
+		r.sendResultConsumers = map[int]bool{}
+	}
+	if r.sendResultConsumers[shardID] {
 		return e.Nil()
 	}
 
-	outEx := r.OutgoingExchange
-	if outEx == "" {
-		outEx = defaultOutgoingExchange
-	}
-	inEx := r.SendResultExchange
-	if inEx == "" {
-		inEx = defaultSendResultExchange
-	}
-
-	r.sendWaiters = &sync.Map{}
-	r.outgoingExchange = outEx
-	r.sendResultExchange = inEx
-
 	qName := fmt.Sprintf("chatdetective.send.result.q%02d", shardID)
-
 	q, uerr := r.RabbitmqChannel.QueueDeclare(
 		qName,
 		true,
@@ -66,31 +82,20 @@ func (r *Router) StartOutgoing(wg *sync.WaitGroup, podID string, shardID int, ct
 	if uerr != nil {
 		return e.FromError(uerr, "declare send result queue").WithSeverity(e.Critical)
 	}
-
 	uerr = r.RabbitmqChannel.QueueBind(
 		q.Name,
 		fmt.Sprintf("%s.q%02d", podID, shardID),
-		inEx,
+		r.sendResultExchange,
 		false,
 		amqp.Table{},
 	)
 	if uerr != nil {
 		return e.FromError(uerr, "bind send result queue").WithSeverity(e.Critical)
 	}
-
-	for i := range r.Endpoints {
-		ep := &r.Endpoints[i]
-		ep.jobs = make(chan *publishEnvelope, 256)
-		ep.outExchange = outEx
-		ep.rabbitmqChannel = r.RabbitmqChannel
-		r.startPublishLoop(wg, ep, ctx)
-	}
-
 	if err := r.startSendResultConsumer(wg, qName, ctx); !err.IsNil() {
 		return err
 	}
-
-	r.outgoingStarted = true
+	r.sendResultConsumers[shardID] = true
 	return e.Nil()
 }
 
