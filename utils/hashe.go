@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// Depricated
+// Makes a hash from any integer or string
 func ToHash(id interface{}) string {
 	data := []byte(fmt.Sprintf("%d", id))
 
