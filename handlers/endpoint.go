@@ -28,7 +28,7 @@ func (ep *Endpoint) Init(name string, chain HandlerChain, f UpdateFilter) *Endpo
 	return ep
 }
 
-func (ep *Endpoint) runChain(update tele.Update, router *Router, wg *sync.WaitGroup) *e.ErrorInfo {
+func (ep *Endpoint) runChain(update tele.Update, router *Router, wg *sync.WaitGroup) e.ErrorInfo {
 	if ep.Filter != nil && !ep.Filter.Filter(update) {
 		return e.Nil()
 	}

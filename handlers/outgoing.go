@@ -27,7 +27,7 @@ type publishEnvelope struct {
 
 // StartOutgoing поднимает publish loop один раз и consumer очереди результатов для каждого shardID.
 // Повторные вызовы безопасны.
-func (r *Router) StartOutgoing(wg *sync.WaitGroup, podID string, shardID int, ctx context.Context) *e.ErrorInfo {
+func (r *Router) StartOutgoing(wg *sync.WaitGroup, podID string, shardID int, ctx context.Context) e.ErrorInfo {
 	if r == nil {
 		return e.NewError("router is nil", "StartOutgoing").WithSeverity(e.Critical)
 	}
@@ -132,7 +132,7 @@ func (r *Router) startPublishLoop(wg *sync.WaitGroup, ep *Endpoint, ctx context.
 					CorrelationId: job.correlationID,
 					Body:          job.body,
 					Headers: amqp.Table{
-						"correlation_id":    job.correlationID,
+						"correlation_id":     job.correlationID,
 						"result_routing_key": resultRoutingKey,
 					},
 				},
@@ -150,7 +150,7 @@ func (r *Router) startPublishLoop(wg *sync.WaitGroup, ep *Endpoint, ctx context.
 	}()
 }
 
-func (r *Router) startSendResultConsumer(wg *sync.WaitGroup, queueName string, ctx context.Context) *e.ErrorInfo {
+func (r *Router) startSendResultConsumer(wg *sync.WaitGroup, queueName string, ctx context.Context) e.ErrorInfo {
 	consumer, uerr := r.RabbitmqChannel.Consume(
 		queueName,
 		fmt.Sprintf("handlers-send-result-%s", queueName),

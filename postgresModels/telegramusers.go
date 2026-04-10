@@ -1,8 +1,10 @@
 package postgresmodels
 
 import (
-	u "github.com/ChatDetectiveORG/shared/utils"
+	"strconv"
 	"time"
+
+	u "github.com/ChatDetectiveORG/shared/utils"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
 	"github.com/go-pg/pg/v10"
@@ -11,8 +13,10 @@ import (
 )
 
 type Telegramuser struct {
-	ID string `pg:"id,pk"`
+	ID                   string `pg:"id,pk"`
 	BusinessConnectionID string
+
+	DataEncryptionKey string
 
 	CreatedAt time.Time `pg:"created_at,default:now()"`
 	UpdatedAt time.Time `pg:"updated_at,default:now()"`
@@ -23,16 +27,45 @@ type Telegramuser struct {
 	Metadata *tele.User `pg:"metadata,type:jsonb"`
 }
 
-func (t *Telegramuser) get(db orm.DB, userID int64) error {
-	err := db.Model(t).Where("id = ?", u.Int64ToHash(userID)).Select()
+func (t *Telegramuser) GetTgId() (int64, e.ErrorInfo) {
+	masterKey, err := u.GetMasterkey()
 	if e.IsNonNil(err) {
-		return e.FromError(err, "error getting telegram user")
+		return 0, err
+	}
+
+	id, err := u.Decrypt([]byte(t.ID), masterKey)
+	if e.IsNonNil(err) {
+		return 0, e.FromError(err, "failed to decrypt telegram user id").WithSeverity(e.Notice)
+	}
+
+	idInt, errUnwrapper := strconv.ParseInt(string(id), 10, 64)
+	if e.IsNonNil(errUnwrapper) {
+		return 0, e.FromError(errUnwrapper, "failed to parse telegram user id").WithSeverity(e.Notice)
+	}
+
+	return idInt, e.Nil()
+}
+
+func (t *Telegramuser) get(db orm.DB, userID int64) e.ErrorInfo {
+	masterKey, err := u.GetMasterkey()
+	if e.IsNonNil(err) {
+		return err
+	}
+
+	idEncr, err := u.Encrypt([]byte(strconv.FormatInt(userID, 10)), masterKey)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to encrypt telegram user id").WithSeverity(e.Notice)
+	}
+
+	errUnwrapped := db.Model(t).Where("id = ?", idEncr).Select()
+	if e.IsNonNil(errUnwrapped) {
+		return e.FromError(errUnwrapped, "error getting telegram user")
 	}
 
 	return e.Nil()
 }
 
-func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) error {
+func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) e.ErrorInfo {
 	err := t.get(tx, tguser.ID)
 	if e.IsNil(err) {
 		return nil
@@ -47,23 +80,23 @@ func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) error {
 
 	settings := &UserSettings{
 		LinkedUserID: user.ID,
-		LinkedUser: user,
+		LinkedUser:   user,
 	}
 
-	_, err = tx.Model(user).
+	_, errUnwrapped := tx.Model(user).
 		OnConflict("(id) DO UPDATE").
 		Set("fullname = EXCLUDED.fullname, username = EXCLUDED.username, is_bot_peer = EXCLUDED.is_bot_peer, metadata = EXCLUDED.metadata").
 		Insert()
-	if e.IsNonNil(err) {
-		return e.FromError(err, "error creating telegram user")
+	if e.IsNonNil(errUnwrapped) {
+		return e.FromError(errUnwrapped, "error creating telegram user")
 	}
 
-	_, err = tx.Model(settings).
+	_, errUnwrapped = tx.Model(settings).
 		OnConflict("(linked_user_id) DO NOTHING").
 		Insert()
-	if e.IsNonNil(err) {
+	if e.IsNonNil(errUnwrapped) {
 		tx.Rollback()
-		return e.FromError(err, "error creating user settings")
+		return e.FromError(errUnwrapped, "error creating user settings")
 	}
 
 	return e.Nil()
