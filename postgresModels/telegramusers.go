@@ -77,10 +77,10 @@ func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) *e.ErrorInfo {
 	}
 
 	user := &Telegramuser{
-		ID:       u.Int64ToHash(tguser.ID),
-		Fullname: tguser.FirstName + " " + tguser.LastName,
-		Username: tguser.Username,
-		Metadata: tguser,
+		ID:                u.ToHash(tguser.ID),
+		Fullname:          tguser.FirstName + " " + tguser.LastName,
+		Username:          tguser.Username,
+		Metadata:          tguser,
 		DataEncryptionKey: key,
 	}
 
