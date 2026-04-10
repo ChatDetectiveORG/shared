@@ -38,9 +38,9 @@ func (t *Telegramuser) GetTgId() (int64, e.ErrorInfo) {
 		return 0, e.FromError(err, "failed to decrypt telegram user id").WithSeverity(e.Notice)
 	}
 
-	idInt, errUnwrapper := strconv.ParseInt(string(id), 10, 64)
-	if e.IsNonNil(errUnwrapper) {
-		return 0, e.FromError(errUnwrapper, "failed to parse telegram user id").WithSeverity(e.Notice)
+	idInt, err := strconv.ParseInt(string(id), 10, 64)
+	if e.IsNonNil(err) {
+		return 0, e.FromError(err, "failed to parse telegram user id").WithSeverity(e.Notice)
 	}
 
 	return idInt, e.Nil()
