@@ -36,7 +36,7 @@ func (hch *HandlerChainHashe) RunID() string {
 }
 
 // Emit публикует в OutgoingExchange тело = JSON tele.Message. Без Router.StartOutgoing — ошибка.
-func (hch *HandlerChainHashe) Emit(routingKey string, msg *tele.Message) e.ErrorInfo {
+func (hch *HandlerChainHashe) Emit(routingKey string, msg *tele.Message) *e.ErrorInfo {
 	if hch.jobs == nil {
 		return e.NewError("outgoing not configured", "call Router.StartOutgoing before Emit").
 			WithSeverity(e.Warning)
@@ -63,7 +63,7 @@ func (hch *HandlerChainHashe) Emit(routingKey string, msg *tele.Message) e.Error
 }
 
 // EmitWait ждёт SendResult от message-sender с тем же correlation_id (в теле или в CorrelationId delivery).
-func (hch *HandlerChainHashe) EmitWait(ctx context.Context, routingKey string, msg *tele.Message) (*tele.Message, e.ErrorInfo) {
+func (hch *HandlerChainHashe) EmitWait(ctx context.Context, routingKey string, msg *tele.Message) (*tele.Message, *e.ErrorInfo) {
 	if hch.jobs == nil || hch.waiters == nil {
 		return nil, e.NewError("outgoing not configured", "call Router.StartOutgoing before EmitWait").
 			WithSeverity(e.Warning)

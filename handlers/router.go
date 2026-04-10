@@ -16,7 +16,7 @@ import (
 // Router маршрутизирует tele.Update по endpoint-ам (фильтры) и опционально по шардам.
 type Router struct {
 	Endpoints       []Endpoint
-	ErrorChannel    chan e.ErrorInfo
+	ErrorChannel    chan *e.ErrorInfo
 	RabbitmqChannel *amqp.Channel
 	ReplicaCount    int
 	PodID           string
@@ -25,17 +25,17 @@ type Router struct {
 	OutgoingExchange   string
 	SendResultExchange string
 
-	wg       *sync.WaitGroup
-	ctx      context.Context
-	mu       sync.Mutex
+	wg    *sync.WaitGroup
+	ctx   context.Context
+	mu    sync.Mutex
 	replicas map[string]chan tele.Update
 
 	outgoingMu          sync.Mutex
 	outgoingStarted     bool
 	sendResultConsumers map[int]bool
 	sendWaiters         *sync.Map
-	outgoingExchange    string
-	sendResultExchange  string
+	outgoingExchange   string
+	sendResultExchange string
 }
 
 func (r *Router) shardRoutingKey(sessionID string) string {
@@ -46,7 +46,7 @@ func (r *Router) shardRoutingKey(sessionID string) string {
 }
 
 // HandleUpdate читает session_id из заголовков, кладёт update в шард-канал (после InitSharding).
-func (r *Router) HandleUpdate(delivery amqp.Delivery) e.ErrorInfo {
+func (r *Router) HandleUpdate(delivery amqp.Delivery) *e.ErrorInfo {
 	sid, _ := delivery.Headers["session_id"].(string)
 	if sid == "" {
 		return e.NewError("missing session_id header", "HandleUpdate").WithSeverity(e.Critical)
@@ -128,7 +128,7 @@ func (r *Router) Dispatch(update tele.Update) {
 
 	for i := range r.Endpoints {
 		ep := &r.Endpoints[i]
-		if err := ep.runChain(update, r, wg); r.ErrorChannel != nil && err != nil && !err.IsNil() && err.Severity() != e.Ingnored {
+		if err := ep.runChain(update, r, wg); r.ErrorChannel != nil && err != nil && !err.IsNil() && err.Severity != e.Ingnored {
 			r.ErrorChannel <- err.PushStack()
 		}
 	}

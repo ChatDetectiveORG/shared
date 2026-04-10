@@ -11,7 +11,7 @@ import (
 	tele "gopkg.in/telebot.v4"
 )
 
-type chainHandlerFunc func(u tele.Update, hashe *HandlerChainHashe) e.ErrorInfo
+type chainHandlerFunc func(u tele.Update, hashe *HandlerChainHashe) *e.ErrorInfo
 type executionType string
 
 const (
@@ -33,7 +33,7 @@ func InitChainHandler(function chainHandlerFunc, exectype executionType, middlew
 	}
 }
 
-func (ch chainHandler) Exec(u tele.Update, hashe *HandlerChainHashe) e.ErrorInfo {
+func (ch chainHandler) Exec(u tele.Update, hashe *HandlerChainHashe) *e.ErrorInfo {
 	if ch.middlewares != nil {
 		for _, middleware := range ch.middlewares {
 			errInfo := middleware.Exec(u, hashe)
@@ -75,14 +75,14 @@ func (hc *HandlerChain) WithWaitGroup(wg *sync.WaitGroup) *HandlerChain {
 	return hc
 }
 
-func (hc *HandlerChain) Run(u tele.Update, jobs chan *publishEnvelope, waiters *sync.Map) e.ErrorInfo {
+func (hc *HandlerChain) Run(u tele.Update, jobs chan *publishEnvelope, waiters *sync.Map) *e.ErrorInfo {
 	ctx, cancel := context.WithTimeout(context.Background(), hc.timeout)
 	defer cancel()
 
 	runID := uuid.New().String()
 	hc.Hashe = HandlerChainHashe{}.Init(jobs, waiters, runID)
 
-	done := make(chan e.ErrorInfo, 1)
+	done := make(chan *e.ErrorInfo, 1)
 
 	runHandlers := func() {
 		for _, handler := range hc.Handlers {
@@ -110,7 +110,7 @@ func (hc *HandlerChain) Run(u tele.Update, jobs chan *publishEnvelope, waiters *
 
 	select {
 	case err := <-done:
-		if err.IsNil() || err.Severity() == e.Ingnored {
+		if err.IsNil() || err.Severity == e.Ingnored {
 			return e.Nil()
 		}
 		return err.PushStack()

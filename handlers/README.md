@@ -17,7 +17,7 @@
 
 1. Сервис unmarshaling-ит `tele.Update` и вызывает **`router.Dispatch(update)`**.
 2. Для каждого endpoint, если фильтр пропускает апдейт, запускается **`HandlerChain.Run`**.
-3. Хендлеры (`chainHandlerFunc`) получают `(update, hashe *HandlerChainHashe)` и возвращают `e.ErrorInfo`.
+3. Хендлеры (`chainHandlerFunc`) получают `(update, hashe *HandlerChainHashe)` и возвращают `*e.ErrorInfo`.
 
 ## Исходящие сообщения (AMQP)
 
