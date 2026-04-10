@@ -12,6 +12,7 @@ import (
 
 type Telegramuser struct {
 	ID string `pg:"id,pk"`
+	BusinessConnectionID string
 
 	CreatedAt time.Time `pg:"created_at,default:now()"`
 	UpdatedAt time.Time `pg:"updated_at,default:now()"`
