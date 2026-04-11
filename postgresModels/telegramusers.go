@@ -50,12 +50,10 @@ func (t *Telegramuser) GetTgId() (int64, *e.ErrorInfo) {
 }
 
 func (t *Telegramuser) GetByTelegramID(db orm.DB, userID int64) *e.ErrorInfo {
-	masterKey, err := u.GetMasterkey()
+	idHash, err := u.ToSecureHash(userID)
 	if e.IsNonNil(err) {
-		return e.FromError(err, "failed to get master key").WithSeverity(e.Critical)
+		return e.FromError(err, "failed to get secure hash").WithSeverity(e.Critical)
 	}
-
-	idHash := u.ToHash(string(masterKey) + "|" + strconv.FormatInt(userID, 10))
 
 	errUnwrapped := db.Model(t).Where("id_hash = ?", idHash).Select()
 	if e.IsNonNil(errUnwrapped) {
@@ -116,7 +114,10 @@ func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) *e.ErrorInfo {
 		return e.FromError(err, "failed to encrypt data encryption key").WithSeverity(e.Critical)
 	}
 
-	idHash := u.ToHash(string(masterKey) + "|" + strconv.FormatInt(tguser.ID, 10))
+	idHash, err := u.ToSecureHash(tguser.ID)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to get secure hash").WithSeverity(e.Critical)
+	}
 
 	user := &Telegramuser{
 		ID:                encryptedID,
