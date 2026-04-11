@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
 
@@ -17,6 +19,22 @@ const (
 	defaultOutgoingExchange   = "chatdetective.output.send"
 	defaultSendResultExchange = "chatdetective.send.result"
 )
+
+// sendResultQueueName returns a dedicated queue per pod so SendResult is not load-balanced
+// across unrelated handler processes that share the same routing key pattern.
+func sendResultQueueName(podID string, shardID int) string {
+	seg := strings.TrimSpace(podID)
+	if seg == "" {
+		seg = "unknown"
+	}
+	seg = strings.Map(func(r rune) rune {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) || r == '-' || r == '_' || r == '.' {
+			return r
+		}
+		return '_'
+	}, seg)
+	return fmt.Sprintf("chatdetective.send.result.%s.q%02d", seg, shardID)
+}
 
 // publishEnvelope — задание на публикацию: тело = JSON tele.Message.
 type publishEnvelope struct {
@@ -71,7 +89,11 @@ func (r *Router) StartOutgoing(wg *sync.WaitGroup, podID string, shardID int, ct
 		return e.Nil()
 	}
 
-	qName := fmt.Sprintf("chatdetective.send.result.q%02d", shardID)
+	effectivePodID := podID
+	if effectivePodID == "" {
+		effectivePodID = "unknown"
+	}
+	qName := sendResultQueueName(effectivePodID, shardID)
 	q, uerr := r.RabbitmqChannel.QueueDeclare(
 		qName,
 		true,
@@ -85,7 +107,7 @@ func (r *Router) StartOutgoing(wg *sync.WaitGroup, podID string, shardID int, ct
 	}
 	uerr = r.RabbitmqChannel.QueueBind(
 		q.Name,
-		fmt.Sprintf("%s.q%02d", podID, shardID),
+		fmt.Sprintf("%s.q%02d", effectivePodID, shardID),
 		r.sendResultExchange,
 		false,
 		amqp.Table{},
@@ -115,11 +137,12 @@ func (r *Router) startPublishLoop(wg *sync.WaitGroup, ep *Endpoint, ctx context.
 				continue
 			}
 			pubCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-			resultRoutingKey := "unknown.q00"
-			if r.PodID != "" {
-				// sendWaiters is shared across router, so a stable return shard is enough.
-				resultRoutingKey = fmt.Sprintf("%s.q%02d", r.PodID, 0)
+			pid := r.PodID
+			if pid == "" {
+				pid = "unknown"
 			}
+			// Must match QueueBind in StartOutgoing (result always to shard 0 key).
+			resultRoutingKey := fmt.Sprintf("%s.q%02d", pid, 0)
 			log.Printf("trace=%s handlers.publish outgoing_exchange=%s outgoing_rk=%s result_rk=%s", job.correlationID, ep.outExchange, job.routingKey, resultRoutingKey)
 			publishErr := ep.rabbitmqChannel.PublishWithContext(
 				pubCtx,
@@ -132,7 +155,7 @@ func (r *Router) startPublishLoop(wg *sync.WaitGroup, ep *Endpoint, ctx context.
 					CorrelationId: job.correlationID,
 					Body:          job.body,
 					Headers: amqp.Table{
-						"correlation_id":    job.correlationID,
+						"correlation_id":     job.correlationID,
 						"result_routing_key": resultRoutingKey,
 					},
 				},
