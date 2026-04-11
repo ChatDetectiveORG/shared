@@ -16,6 +16,7 @@ import (
 
 type Telegramuser struct {
 	ID                       []byte `pg:"id,pk"`
+	IDHash                   string `pg:"id_hash"`
 	BusinessConnectionIDHash string
 
 	DataEncryptionKey []byte
@@ -49,21 +50,14 @@ func (t *Telegramuser) GetTgId() (int64, *e.ErrorInfo) {
 }
 
 func (t *Telegramuser) GetByTelegramID(db orm.DB, userID int64) *e.ErrorInfo {
-	if len(t.DataEncryptionKey) == 0 {
-		return e.NewError("data encryption key is not set", "data encryption key is not set").WithSeverity(e.Notice)
-	}
-
-	key, err := u.DecryptUserKey(t.DataEncryptionKey)
+	masterKey, err := u.GetMasterkey()
 	if e.IsNonNil(err) {
-		return e.FromError(err, "failed to decrypt data encryption key").WithSeverity(e.Notice)
+		return e.FromError(err, "failed to get master key").WithSeverity(e.Critical)
 	}
 
-	idEncr, err := u.Encrypt([]byte(strconv.FormatInt(userID, 10)), key)
-	if e.IsNonNil(err) {
-		return e.FromError(err, "failed to encrypt telegram user id").WithSeverity(e.Notice)
-	}
+	idHash := u.ToHash(string(masterKey) + "|" + strconv.FormatInt(userID, 10))
 
-	errUnwrapped := db.Model(t).Where("id = ?", idEncr).Select()
+	errUnwrapped := db.Model(t).Where("id_hash = ?", idHash).Select()
 	if e.IsNonNil(errUnwrapped) {
 		return e.FromError(errUnwrapped, "error getting telegram user")
 	}
@@ -122,8 +116,11 @@ func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) *e.ErrorInfo {
 		return e.FromError(err, "failed to encrypt data encryption key").WithSeverity(e.Critical)
 	}
 
+	idHash := u.ToHash(string(masterKey) + "|" + strconv.FormatInt(tguser.ID, 10))
+
 	user := &Telegramuser{
 		ID:                encryptedID,
+		IDHash:            idHash,
 		Fullname:          encryptedFullname,
 		Username:          encryptedUsername,
 		Metadata:          encryptedMetadata,
@@ -136,7 +133,7 @@ func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) *e.ErrorInfo {
 	}
 
 	_, errUnwrapped := tx.Model(user).
-		OnConflict("(id) DO UPDATE").
+		OnConflict("(id_hash) DO UPDATE").
 		Set("fullname = EXCLUDED.fullname, username = EXCLUDED.username, metadata = EXCLUDED.metadata").
 		Insert()
 	if e.IsNonNil(errUnwrapped) {
