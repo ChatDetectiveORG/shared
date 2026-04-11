@@ -1,6 +1,7 @@
 package postgresmodels
 
 import (
+	"encoding/json"
 	"strconv"
 	"time"
 
@@ -13,18 +14,18 @@ import (
 )
 
 type Telegramuser struct {
-	ID                   string `pg:"id,pk"`
-	BusinessConnectionID string
+	ID                   []byte `pg:"id,pk"`
+	BusinessConnectionIDHash string
 
 	DataEncryptionKey []byte
 
 	CreatedAt time.Time `pg:"created_at,default:now()"`
 	UpdatedAt time.Time `pg:"updated_at,default:now()"`
 
-	Fullname string
-	Username string
+	Fullname []byte
+	Username []byte
 
-	Metadata *tele.User `pg:"metadata,type:jsonb"`
+	Metadata []byte `pg:"metadata"`
 }
 
 func (t *Telegramuser) GetTgId() (int64, *e.ErrorInfo) {
@@ -33,7 +34,7 @@ func (t *Telegramuser) GetTgId() (int64, *e.ErrorInfo) {
 		return 0, e.FromError(err, "failed to decrypt data encryption key").WithSeverity(e.Notice)
 	}
 
-	id, err := u.Decrypt([]byte(t.ID), key)
+	id, err := u.Decrypt(t.ID, key)
 	if e.IsNonNil(err) {
 		return 0, e.FromError(err, "failed to decrypt telegram user id").WithSeverity(e.Notice)
 	}
@@ -76,16 +77,41 @@ func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) *e.ErrorInfo {
 		return e.FromError(err, "failed to generate user secret key").WithSeverity(e.Notice)
 	}
 
+	encryptedID, err := u.Encrypt([]byte(strconv.FormatInt(tguser.ID, 10)), key)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to encrypt telegram user id").WithSeverity(e.Notice)
+	}
+
+	encryptedFullname, err := u.Encrypt([]byte(tguser.FirstName + " " + tguser.LastName), key)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to encrypt telegram user fullname").WithSeverity(e.Notice)
+	}
+
+	encryptedUsername, err := u.Encrypt([]byte(tguser.Username), key)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to encrypt telegram user username").WithSeverity(e.Notice)
+	}
+
+	jsonMetadata, eraw := json.Marshal(tguser)
+	if e.IsNonNil(eraw) {
+		return e.FromError(eraw, "failed to encrypt telegram user metadata").WithSeverity(e.Notice)
+	}
+
+	encryptedMetadata, err := u.Encrypt(jsonMetadata, key)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to encrypt telegram user metadata").WithSeverity(e.Notice)
+	}
+
 	user := &Telegramuser{
-		ID:                u.ToHash(tguser.ID),
-		Fullname:          tguser.FirstName + " " + tguser.LastName,
-		Username:          tguser.Username,
-		Metadata:          tguser,
+		ID:                encryptedID,
+		Fullname:          encryptedFullname,
+		Username:          encryptedUsername,
+		Metadata:          encryptedMetadata,
 		DataEncryptionKey: key,
 	}
 
 	settings := &UserSettings{
-		LinkedUserID: user.ID,
+		LinkedUserID: encryptedID,
 		LinkedUser:   user,
 	}
 

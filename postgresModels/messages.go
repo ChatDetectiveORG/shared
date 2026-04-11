@@ -2,8 +2,6 @@ package postgresmodels
 
 import (
 	"time"
-
-	tele "gopkg.in/telebot.v4"
 )
 
 type Message struct {
@@ -12,16 +10,18 @@ type Message struct {
 	CreatedAt time.Time `pg:"created_at,default:now()"`
 	UpdatedAt time.Time `pg:"updated_at,default:now()"`
 
-	SenderID     string
-	ChatID       string
+	SenderID     []byte
+	ChatID       []byte
 	MessageID    int
-	BusinessConnectionID string
+	BusinessConnectionIDHash string
 
 	IsDeleted bool `pg:"is_deleted,default:false"`
 
-	Metadata *tele.Message `pg:"metadata,type:jsonb"`
+	Metadata []byte `pg:"metadata"`
 }
 
+// For extended chat export
+// Для базового функционала не нужно сохранение всех версий сообщения
 type MessageVersion struct {
 	ID int `pg:"id,pk,autoincrement"`
 	
@@ -31,5 +31,5 @@ type MessageVersion struct {
 	MessageID int
 	Message *Message `pg:"rel:has-one,fk:message_id"`
 
-	OldMessageMetadata *tele.Message `pg:"old_message_metadata,type:jsonb"`
+	OldMessageMetadata []byte `pg:"old_message_metadata"`
 }
