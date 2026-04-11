@@ -12,6 +12,7 @@ type Message struct {
 
 	SenderID     []byte
 	ChatID       []byte
+	ChatIDHash   string
 	MessageID    int
 	BusinessConnectionIDHash string
 
