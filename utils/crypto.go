@@ -89,9 +89,9 @@ func NewUserSecretKey() ([]byte, *e.ErrorInfo) {
 	}
 
 	encryptedDek, err := Encrypt(dek, masterKey)
-    if err != nil {
-        return nil, e.FromError(err, "failed to encrypt data encryption key").WithSeverity(e.Critical)
-    }
+	if e.IsNonNil(err) {
+		return nil, e.FromError(err, "failed to encrypt data encryption key").WithSeverity(e.Critical)
+	}
 
 	return encryptedDek, e.Nil()
 }
