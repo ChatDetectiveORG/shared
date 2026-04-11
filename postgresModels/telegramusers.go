@@ -133,8 +133,7 @@ func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) *e.ErrorInfo {
 	}
 
 	_, errUnwrapped := tx.Model(user).
-		OnConflict("(id_hash) DO UPDATE").
-		Set("fullname = EXCLUDED.fullname, username = EXCLUDED.username, metadata = EXCLUDED.metadata").
+		OnConflict("(id_hash) DO NOTHING").
 		Insert()
 	if e.IsNonNil(errUnwrapped) {
 		return e.FromError(errUnwrapped, "error creating telegram user")
