@@ -1,17 +1,17 @@
 package telegram
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	tele "gopkg.in/telebot.v4"
 )
 
-// MessageSummary contains structured metadata about a message for display/audit.
+// MessageSummary — структурированные метаданные сообщения для отображения и аудита.
 type MessageSummary struct {
-	// Reply/Quote info
-	ReplyToPreview    string `json:"reply_to_preview,omitempty"`    // First 100 chars of replied message or type description
+	// Ответ / цитата
+	ReplyToPreview    string `json:"reply_to_preview,omitempty"` // до 100 символов текста ответа или описание типа
 	ReplyToMessageID  int    `json:"reply_to_message_id,omitempty"`
 	ReplyToChatID     int64  `json:"reply_to_chat_id,omitempty"`
 	QuoteText         string `json:"quote_text,omitempty"`
@@ -19,30 +19,38 @@ type MessageSummary struct {
 	QuoteFromUser     string `json:"quote_from_user,omitempty"`
 	ExternalReplyInfo string `json:"external_reply_info,omitempty"`
 
-	// Via bot
+	// Через бота
 	ViaBotUsername string `json:"via_bot_username,omitempty"`
 	ViaBotID       int64  `json:"via_bot_id,omitempty"`
 
-	// Forward info
-	ForwardedFromUser     string `json:"forwarded_from_user,omitempty"`
-	ForwardedFromChat     string `json:"forwarded_from_chat,omitempty"`
-	ForwardedFromMessageID int   `json:"forwarded_from_message_id,omitempty"`
-	ForwardedDate         string `json:"forwarded_date,omitempty"`
-	ForwardedSignature    string `json:"forwarded_signature,omitempty"`
-	ForwardedSenderName   string `json:"forwarded_sender_name,omitempty"`
-	ForwardOriginInfo     string `json:"forward_origin_info,omitempty"`
-	IsAutomaticForward    bool   `json:"is_automatic_forward,omitempty"`
+	// Пересылка
+	ForwardedFromUser      string `json:"forwarded_from_user,omitempty"`
+	ForwardedFromChat      string `json:"forwarded_from_chat,omitempty"`
+	ForwardedFromMessageID int    `json:"forwarded_from_message_id,omitempty"`
+	ForwardedDate          string `json:"forwarded_date,omitempty"`
+	ForwardedSignature     string `json:"forwarded_signature,omitempty"`
+	ForwardedSenderName    string `json:"forwarded_sender_name,omitempty"`
+	// Дополнение к пересылке (только то, что не вынесено в поля выше).
+	ForwardOriginInfo  string `json:"forward_origin_info,omitempty"`
+	IsAutomaticForward bool   `json:"is_automatic_forward,omitempty"`
 
-	// Story reply
+	// Ответ на историю
 	ReplyToStoryInfo string `json:"reply_to_story_info,omitempty"`
 
-	// Other
-	ProtectedContent bool   `json:"protected_content,omitempty"`
-	FromOffline      bool   `json:"from_offline,omitempty"`
-	ForumTopicID     int    `json:"forum_topic_id,omitempty"`
+	// Прочее
+	ProtectedContent bool `json:"protected_content,omitempty"`
+	FromOffline      bool `json:"from_offline,omitempty"`
+	ForumTopicID     int  `json:"forum_topic_id,omitempty"`
 }
 
-// BuildMessageSummary creates a structured summary with all available metadata.
+type originDisplayContext struct {
+	userDisplay string
+	chatDisplay string
+	messageID   int
+	signature   string
+}
+
+// BuildMessageSummary собирает сводку по всем доступным полям сообщения.
 func BuildMessageSummary(msg *tele.Message) *MessageSummary {
 	if msg == nil {
 		return nil
@@ -54,7 +62,6 @@ func BuildMessageSummary(msg *tele.Message) *MessageSummary {
 		ForumTopicID:     msg.ThreadID,
 	}
 
-	// Via bot
 	if msg.Via != nil {
 		s.ViaBotID = msg.Via.ID
 		s.ViaBotUsername = msg.Via.Username
@@ -63,14 +70,12 @@ func BuildMessageSummary(msg *tele.Message) *MessageSummary {
 		}
 	}
 
-	// Reply to message (in same chat)
 	if msg.ReplyTo != nil {
 		s.ReplyToMessageID = msg.ReplyTo.ID
 		s.ReplyToChatID = msg.ReplyTo.Chat.ID
 		s.ReplyToPreview = getMessageTextPreview(msg.ReplyTo, 100)
 	}
 
-	// Quote (reply with quoted text)
 	if msg.Quote != nil {
 		s.QuoteText = msg.Quote.Text
 		if len(s.QuoteText) > 100 {
@@ -78,22 +83,24 @@ func BuildMessageSummary(msg *tele.Message) *MessageSummary {
 		}
 	}
 
-	// External reply (reply from another chat/forum)
 	if msg.ExternalReply != nil {
-		s.ExternalReplyInfo = formatExternalReply(msg.ExternalReply)
-		if msg.ExternalReply.Chat != nil {
-			s.QuoteFromChat = formatChat(msg.ExternalReply.Chat)
+		er := msg.ExternalReply
+		if er.Chat != nil {
+			s.QuoteFromChat = formatChat(er.Chat)
 		}
-		if msg.ExternalReply.Origin != nil && msg.ExternalReply.Origin.Sender != nil {
-			s.QuoteFromUser = formatUser(msg.ExternalReply.Origin.Sender)
+		if er.Origin != nil && er.Origin.Sender != nil {
+			s.QuoteFromUser = formatUser(er.Origin.Sender)
 		}
-		s.ReplyToMessageID = msg.ExternalReply.MessageID
-		if s.ReplyToPreview == "" && msg.ExternalReply.Origin != nil {
-			s.ReplyToPreview = formatOriginPreview(msg.ExternalReply.Origin)
+		if s.QuoteFromUser == "" && er.Origin != nil && er.Origin.SenderUsername != "" {
+			s.QuoteFromUser = "@" + strings.TrimPrefix(er.Origin.SenderUsername, "@")
 		}
+		s.ReplyToMessageID = er.MessageID
+		if s.ReplyToPreview == "" && er.Origin != nil {
+			s.ReplyToPreview = formatOriginPreview(er.Origin)
+		}
+		s.ExternalReplyInfo = formatExternalReply(er, s.QuoteFromUser, s.QuoteFromChat, s.ReplyToMessageID)
 	}
 
-	// Forward info (legacy: forward_from, forward_from_chat)
 	if msg.OriginalSender != nil {
 		s.ForwardedFromUser = formatUser(msg.OriginalSender)
 	}
@@ -102,27 +109,17 @@ func BuildMessageSummary(msg *tele.Message) *MessageSummary {
 		s.ForwardedFromMessageID = msg.OriginalMessageID
 	}
 	if msg.OriginalUnixtime != 0 {
-		s.ForwardedDate = fmt.Sprintf("(date: %d)", msg.OriginalUnixtime)
+		s.ForwardedDate = formatForwardedDateRussian(int64(msg.OriginalUnixtime))
 	}
 	s.ForwardedSignature = msg.OriginalSignature
 	s.ForwardedSenderName = msg.OriginalSenderName
 	s.IsAutomaticForward = msg.AutomaticForward
 
-	// Forward origin (new API)
 	if msg.Origin != nil {
-		s.ForwardOriginInfo = formatMessageOrigin(msg.Origin)
-		if s.ForwardedFromChat == "" && msg.Origin.Chat != nil {
-			s.ForwardedFromChat = formatChat(msg.Origin.Chat)
-		}
-		if s.ForwardedFromMessageID == 0 {
-			s.ForwardedFromMessageID = msg.Origin.MessageID
-		}
-		if msg.Origin.DateUnixtime != 0 {
-			s.ForwardedDate = fmt.Sprintf("(date: %d)", msg.Origin.DateUnixtime)
-		}
+		mergeMessageOriginIntoSummary(s, msg.Origin)
+		s.ForwardOriginInfo = forwardOriginSupplemental(msg.Origin, s)
 	}
 
-	// Story reply
 	if msg.Story != nil {
 		s.ReplyToStoryInfo = formatStory(msg.Story)
 	}
@@ -133,72 +130,206 @@ func BuildMessageSummary(msg *tele.Message) *MessageSummary {
 	return s
 }
 
-func formatExternalReply(ext *tele.ExternalReply) string {
+func mergeMessageOriginIntoSummary(s *MessageSummary, o *tele.MessageOrigin) {
+	if s == nil || o == nil {
+		return
+	}
+	typ := normalizeOriginType(o.Type)
+
+	if s.ForwardedFromUser == "" && o.Sender != nil {
+		s.ForwardedFromUser = formatUser(o.Sender)
+	}
+	if s.ForwardedFromUser == "" && o.SenderUsername != "" {
+		s.ForwardedFromUser = "@" + strings.TrimPrefix(o.SenderUsername, "@")
+	}
+
+	switch typ {
+	case "chat":
+		if o.SenderChat != nil && s.ForwardedFromChat == "" {
+			s.ForwardedFromChat = formatChat(o.SenderChat)
+		}
+	case "channel":
+		if o.Chat != nil && s.ForwardedFromChat == "" {
+			s.ForwardedFromChat = formatChat(o.Chat)
+		}
+	default:
+		if s.ForwardedFromChat == "" && o.Chat != nil {
+			s.ForwardedFromChat = formatChat(o.Chat)
+		}
+		if s.ForwardedFromChat == "" && o.SenderChat != nil {
+			s.ForwardedFromChat = formatChat(o.SenderChat)
+		}
+	}
+
+	if s.ForwardedFromMessageID == 0 && o.MessageID != 0 {
+		s.ForwardedFromMessageID = o.MessageID
+	}
+	if s.ForwardedSignature == "" && o.Signature != "" {
+		s.ForwardedSignature = o.Signature
+	}
+	if o.DateUnixtime != 0 {
+		s.ForwardedDate = formatForwardedDateRussian(o.DateUnixtime)
+	}
+}
+
+func normalizeOriginType(t string) string {
+	t = strings.TrimSpace(t)
+	t = strings.TrimPrefix(t, "message_origin_")
+	return t
+}
+
+func russianOriginTypeNoun(typ string) string {
+	switch typ {
+	case "user":
+		return "пользователь"
+	case "hidden_user":
+		return "скрытый пользователь"
+	case "chat":
+		return "чат"
+	case "channel":
+		return "канал"
+	default:
+		if typ == "" {
+			return ""
+		}
+		return typ
+	}
+}
+
+func formatForwardedDateRussian(unix int64) string {
+	if unix == 0 {
+		return ""
+	}
+	t := time.Unix(unix, 0)
+	return "дата оригинала: " + t.Format("02.01.2006 15:04")
+}
+
+// Дополнительная строка про происхождение пересылки без дублирования уже показанных полей.
+func forwardOriginSupplemental(o *tele.MessageOrigin, s *MessageSummary) string {
+	if o == nil {
+		return ""
+	}
+	ctx := originDisplayContext{
+		userDisplay: s.ForwardedFromUser,
+		chatDisplay: s.ForwardedFromChat,
+		messageID:   s.ForwardedFromMessageID,
+		signature:   s.ForwardedSignature,
+	}
+	return originSupplementalText(o, ctx)
+}
+
+func originSupplementalText(o *tele.MessageOrigin, ctx originDisplayContext) string {
+	typ := normalizeOriginType(o.Type)
+	var parts []string
+
+	userFromO := originUserDisplay(o)
+	chatFromO := ""
+	if o.Chat != nil {
+		chatFromO = formatChat(o.Chat)
+	}
+	senderChatStr := ""
+	if o.SenderChat != nil {
+		senderChatStr = formatChat(o.SenderChat)
+	}
+
+	switch typ {
+	case "hidden_user":
+		parts = append(parts, "отправитель со скрытым профилем")
+	case "user", "channel", "chat":
+		// тип очевиден из от/из; отдельную метку не дублируем
+	default:
+		if typ != "" {
+			parts = append(parts, "тип источника: "+russianOriginTypeNoun(typ))
+		}
+	}
+
+	// Пользователь из origin, если отличается от уже показанного
+	if userFromO != "" && userFromO != ctx.userDisplay {
+		parts = append(parts, "отправитель: "+userFromO)
+	}
+
+	// Чат канала vs чат отправителя — только если не совпадает с уже выведенным «из …»
+	if chatFromO != "" && chatFromO != ctx.chatDisplay {
+		parts = append(parts, "канал: "+chatFromO)
+	}
+	if senderChatStr != "" && senderChatStr != ctx.chatDisplay && senderChatStr != chatFromO {
+		parts = append(parts, "чат отправителя: "+senderChatStr)
+	}
+
+	if o.MessageID != 0 && o.MessageID != ctx.messageID {
+		parts = append(parts, "id сообщения: "+strconv.Itoa(o.MessageID))
+	}
+	if o.Signature != "" && o.Signature != ctx.signature {
+		parts = append(parts, "подпись автора: "+o.Signature)
+	}
+
+	return strings.Join(parts, "; ")
+}
+
+func originUserDisplay(o *tele.MessageOrigin) string {
+	if o == nil {
+		return ""
+	}
+	if o.Sender != nil {
+		return formatUser(o.Sender)
+	}
+	if o.SenderUsername != "" {
+		return "@" + strings.TrimPrefix(o.SenderUsername, "@")
+	}
+	return ""
+}
+
+func formatExternalReply(ext *tele.ExternalReply, quoteUser, quoteChat string, replyToMsgID int) string {
 	if ext == nil {
 		return ""
 	}
 	var parts []string
+	ctx := originDisplayContext{
+		userDisplay: quoteUser,
+		chatDisplay: quoteChat,
+		messageID:   replyToMsgID,
+	}
 	if ext.Origin != nil {
-		parts = append(parts, formatMessageOrigin(ext.Origin))
+		ctx.signature = ext.Origin.Signature
+		if sup := originSupplementalText(ext.Origin, ctx); sup != "" {
+			parts = append(parts, sup)
+		}
 	}
 	if ext.Chat != nil {
-		parts = append(parts, "чат: "+formatChat(ext.Chat))
+		ch := formatChat(ext.Chat)
+		if ch != quoteChat {
+			parts = append(parts, "чат: "+ch)
+		}
 	}
-	if ext.MessageID != 0 {
-		parts = append(parts, "msg_id: "+strconv.Itoa(ext.MessageID))
+	if ext.MessageID != 0 && ext.MessageID != replyToMsgID {
+		parts = append(parts, "id сообщения: "+strconv.Itoa(ext.MessageID))
 	}
-	// Preview of quoted content from ExternalReply
-	if len(ext.Photo) > 0 {
+
+	switch {
+	case len(ext.Photo) > 0:
 		parts = append(parts, "[фото]")
-	} else if ext.Video != nil {
+	case ext.Video != nil:
 		parts = append(parts, "[видео]")
-	} else if ext.Document != nil {
+	case ext.Document != nil:
 		parts = append(parts, "[документ]")
-	} else if ext.Audio != nil {
+	case ext.Audio != nil:
 		parts = append(parts, "[аудио]")
-	} else if ext.Voice != nil {
+	case ext.Voice != nil:
 		parts = append(parts, "[голосовое]")
-	} else if ext.Sticker != nil {
+	case ext.Sticker != nil:
 		parts = append(parts, "[стикер]")
-	} else if ext.Animation != nil {
+	case ext.Animation != nil:
 		parts = append(parts, "[GIF]")
-	} else if ext.Contact != nil {
+	case ext.Contact != nil:
 		parts = append(parts, "[контакт]")
-	} else if ext.Location != nil {
+	case ext.Location != nil:
 		parts = append(parts, "[локация]")
-	} else if ext.Venue != nil {
+	case ext.Venue != nil:
 		parts = append(parts, "[место]")
-	} else if ext.Poll != nil {
+	case ext.Poll != nil:
 		parts = append(parts, "[опрос]")
 	}
 	return strings.Join(parts, "; ")
-}
-
-func formatMessageOrigin(origin *tele.MessageOrigin) string {
-	if origin == nil {
-		return ""
-	}
-	var parts []string
-	parts = append(parts, "origin_type: "+origin.Type)
-	if origin.Sender != nil {
-		parts = append(parts, "from: "+formatUser(origin.Sender))
-	}
-	if origin.SenderUsername != "" {
-		parts = append(parts, "username: @"+origin.SenderUsername)
-	}
-	if origin.SenderChat != nil {
-		parts = append(parts, "chat: "+formatChat(origin.SenderChat))
-	}
-	if origin.Chat != nil {
-		parts = append(parts, "channel: "+formatChat(origin.Chat))
-	}
-	if origin.MessageID != 0 {
-		parts = append(parts, "msg_id: "+strconv.Itoa(origin.MessageID))
-	}
-	if origin.Signature != "" {
-		parts = append(parts, "signature: "+origin.Signature)
-	}
-	return strings.Join(parts, ", ")
 }
 
 func formatOriginPreview(origin *tele.MessageOrigin) string {
@@ -206,10 +337,13 @@ func formatOriginPreview(origin *tele.MessageOrigin) string {
 		return ""
 	}
 	if origin.Sender != nil {
-		return "ответ для " + formatUser(origin.Sender)
+		return "ответ пользователю " + formatUser(origin.Sender)
+	}
+	if origin.SenderUsername != "" {
+		return "ответ пользователю @" + strings.TrimPrefix(origin.SenderUsername, "@")
 	}
 	if origin.SenderChat != nil {
-		return "ответ из " + formatChat(origin.SenderChat)
+		return "ответ из чата " + formatChat(origin.SenderChat)
 	}
 	return "ответ из другого чата"
 }
@@ -221,7 +355,7 @@ func formatChat(c *tele.Chat) string {
 	if c.Username != "" {
 		return "@" + c.Username
 	}
-	return c.Title + " (id: " + strconv.FormatInt(c.ID, 10) + ")"
+	return c.Title + " (ид чата: " + strconv.FormatInt(c.ID, 10) + ")"
 }
 
 func formatStory(s *tele.Story) string {
@@ -229,12 +363,12 @@ func formatStory(s *tele.Story) string {
 		return ""
 	}
 	if s.Poster != nil {
-		return "история (chat: " + formatChat(s.Poster) + ")"
+		return "история (чат: " + formatChat(s.Poster) + ")"
 	}
 	return "история"
 }
 
-// String returns a human-readable multi-line summary.
+// String возвращает многострочное описание на русском.
 func (s *MessageSummary) String() string {
 	if s == nil {
 		return ""
@@ -242,56 +376,69 @@ func (s *MessageSummary) String() string {
 	var lines []string
 
 	if s.ReplyToPreview != "" {
-		lines = append(lines, "↩ Ответ на: "+s.ReplyToPreview)
+		lines = append(lines, "Ответ на: "+s.ReplyToPreview)
 		if s.ReplyToMessageID != 0 {
-			lines = append(lines, "  msg_id: "+strconv.Itoa(s.ReplyToMessageID))
+			lines = append(lines, "  id сообщения: "+strconv.Itoa(s.ReplyToMessageID))
 		}
 		if s.QuoteFromChat != "" {
 			lines = append(lines, "  чат: "+s.QuoteFromChat)
 		}
+		if s.QuoteFromUser != "" {
+			lines = append(lines, "  пользователь: "+s.QuoteFromUser)
+		}
 	}
 	if s.QuoteText != "" {
-		lines = append(lines, "📎 Цитата: "+s.QuoteText)
+		lines = append(lines, "Цитата: "+s.QuoteText)
 	}
 	if s.ExternalReplyInfo != "" {
-		lines = append(lines, "🔗 Внешний ответ: "+s.ExternalReplyInfo)
+		lines = append(lines, "Внешний ответ: "+s.ExternalReplyInfo)
 	}
 	if s.ViaBotUsername != "" {
-		lines = append(lines, "🤖 Через бота: "+s.ViaBotUsername)
+		lines = append(lines, "Через бота: "+s.ViaBotUsername)
 	}
-	if s.ForwardedFromUser != "" || s.ForwardedFromChat != "" {
-		fwd := "📤 Переслано"
+
+	if s.ForwardedFromUser != "" || s.ForwardedFromChat != "" || s.ForwardedFromMessageID != 0 ||
+		s.ForwardedSignature != "" || s.ForwardedSenderName != "" || s.ForwardOriginInfo != "" {
+		var fwdParts []string
 		if s.ForwardedFromUser != "" {
-			fwd += " от " + s.ForwardedFromUser
+			fwdParts = append(fwdParts, "от "+s.ForwardedFromUser)
 		}
 		if s.ForwardedFromChat != "" {
-			fwd += " из " + s.ForwardedFromChat
+			fwdParts = append(fwdParts, "из "+s.ForwardedFromChat)
 		}
 		if s.ForwardedFromMessageID != 0 {
-			fwd += " (msg_id: " + strconv.Itoa(s.ForwardedFromMessageID) + ")"
+			fwdParts = append(fwdParts, "id сообщения "+strconv.Itoa(s.ForwardedFromMessageID))
+		}
+		line := "Переслано"
+		if len(fwdParts) > 0 {
+			line += " " + strings.Join(fwdParts, ", ")
+		}
+		if s.ForwardedDate != "" {
+			line += ", " + s.ForwardedDate
 		}
 		if s.ForwardedSignature != "" {
-			fwd += " [" + s.ForwardedSignature + "]"
+			line += ", подпись: " + s.ForwardedSignature
 		}
 		if s.ForwardedSenderName != "" {
-			fwd += " (" + s.ForwardedSenderName + ")"
+			line += ", имя отправителя: " + s.ForwardedSenderName
 		}
+		lines = append(lines, line)
 		if s.ForwardOriginInfo != "" {
-			fwd += " | " + s.ForwardOriginInfo
+			lines = append(lines, "  "+s.ForwardOriginInfo)
 		}
-		lines = append(lines, fwd)
 	}
+
 	if s.IsAutomaticForward {
-		lines = append(lines, "  (авто-пересылка)")
+		lines = append(lines, "Автоматическая пересылка")
 	}
 	if s.ReplyToStoryInfo != "" {
-		lines = append(lines, "📖 Ответ на историю: "+s.ReplyToStoryInfo)
+		lines = append(lines, "Ответ на историю: "+s.ReplyToStoryInfo)
 	}
 	if s.ProtectedContent {
-		lines = append(lines, "🔒 Защищённый контент")
+		lines = append(lines, "Защищённый контент")
 	}
 	if s.FromOffline {
-		lines = append(lines, "⏰ Отправлено офлайн")
+		lines = append(lines, "Отправлено офлайн")
 	}
 
 	return strings.Join(lines, "\n")
