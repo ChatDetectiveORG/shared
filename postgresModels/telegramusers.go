@@ -1,6 +1,7 @@
 package postgresmodels
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"strconv"
 	"time"
@@ -14,7 +15,7 @@ import (
 )
 
 type Telegramuser struct {
-	ID                   []byte `pg:"id,pk"`
+	ID                       []byte `pg:"id,pk"`
 	BusinessConnectionIDHash string
 
 	DataEncryptionKey []byte
@@ -72,7 +73,11 @@ func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) *e.ErrorInfo {
 		return nil
 	}
 
-	key, err := u.NewUserSecretKey()
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return e.FromError(err, "failed to read full random reader").WithSeverity(e.Critical)
+	}
+
 	if e.IsNonNil(err) {
 		return e.FromError(err, "failed to generate user secret key").WithSeverity(e.Notice)
 	}
@@ -82,7 +87,7 @@ func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) *e.ErrorInfo {
 		return e.FromError(err, "failed to encrypt telegram user id").WithSeverity(e.Notice)
 	}
 
-	encryptedFullname, err := u.Encrypt([]byte(tguser.FirstName + " " + tguser.LastName), key)
+	encryptedFullname, err := u.Encrypt([]byte(tguser.FirstName+" "+tguser.LastName), key)
 	if e.IsNonNil(err) {
 		return e.FromError(err, "failed to encrypt telegram user fullname").WithSeverity(e.Notice)
 	}
@@ -102,12 +107,22 @@ func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) *e.ErrorInfo {
 		return e.FromError(err, "failed to encrypt telegram user metadata").WithSeverity(e.Notice)
 	}
 
+	masterKey, err := u.GetMasterkey()
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to get master key").WithSeverity(e.Critical)
+	}
+
+	encryptedKey, err := u.Encrypt(key, masterKey)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to encrypt data encryption key").WithSeverity(e.Critical)
+	}
+
 	user := &Telegramuser{
 		ID:                encryptedID,
 		Fullname:          encryptedFullname,
 		Username:          encryptedUsername,
 		Metadata:          encryptedMetadata,
-		DataEncryptionKey: key,
+		DataEncryptionKey: encryptedKey,
 	}
 
 	settings := &UserSettings{

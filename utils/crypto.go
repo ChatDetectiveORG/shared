@@ -76,22 +76,3 @@ func DecryptUserKey(key []byte) ([]byte, *e.ErrorInfo) {
 
 	return key, e.Nil()
 }
-
-func NewUserSecretKey() ([]byte, *e.ErrorInfo) {
-	dek := make([]byte, 32)
-    if _, err := rand.Read(dek); err != nil {
-        return nil, e.FromError(err, "failed to read full random reader").WithSeverity(e.Critical)
-    }
-
-	masterKey, err := GetMasterkey()
-	if e.IsNonNil(err) {
-		return nil, err
-	}
-
-	encryptedDek, err := Encrypt(dek, masterKey)
-	if e.IsNonNil(err) {
-		return nil, e.FromError(err, "failed to encrypt data encryption key").WithSeverity(e.Critical)
-	}
-
-	return encryptedDek, e.Nil()
-}
