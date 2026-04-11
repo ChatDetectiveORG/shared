@@ -47,7 +47,7 @@ func (t *Telegramuser) GetTgId() (int64, *e.ErrorInfo) {
 	return idInt, e.Nil()
 }
 
-func (t *Telegramuser) get(db orm.DB, userID int64) *e.ErrorInfo {
+func (t *Telegramuser) GetByTelegramID(db orm.DB, userID int64) *e.ErrorInfo {
 	key, err := u.DecryptUserKey(t.DataEncryptionKey)
 	if e.IsNonNil(err) {
 		return e.FromError(err, "failed to decrypt data encryption key").WithSeverity(e.Notice)
@@ -67,7 +67,7 @@ func (t *Telegramuser) get(db orm.DB, userID int64) *e.ErrorInfo {
 }
 
 func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) *e.ErrorInfo {
-	err := t.get(tx, tguser.ID)
+	err := t.GetByTelegramID(tx, tguser.ID)
 	if e.IsNil(err) {
 		return nil
 	}
