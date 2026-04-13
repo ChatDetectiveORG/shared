@@ -18,6 +18,7 @@ type Message struct {
 
 	IsDeleted bool `pg:"is_deleted,default:false"`
 
+	MediaGroupIDHash string `pg:"media_group_id_hash"`
 	Metadata []byte `pg:"metadata"`
 }
 
