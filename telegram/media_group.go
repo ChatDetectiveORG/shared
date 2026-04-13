@@ -6,16 +6,19 @@ import (
 	tele "gopkg.in/telebot.v4"
 )
 
-// BuildMediaGroup builds an Album from messages that share the same AlbumID.
-// Messages should be pre-filtered to have the same media_group_id.
-// Returns (album, caption, ok). Caption is taken from the first message.
-// ok is false if the group is empty or contains unsupported media types.
+// BuildMediaGroup normalizes Telegram album messages into project-friendly
+// tele.Message payloads that can be serialized and sent via telegram.message.send.
+// Messages should already belong to the same media_group_id.
 //
-// Supported media types for albums: Photo, Video, Document, Audio, Animation.
-// Voice, VideoNote, Sticker are NOT supported in media groups by Telegram API.
-func BuildMediaGroup(msgs []*tele.Message) (tele.Album, *tele.SendOptions, bool) {
+// Telegram allows a shared caption for an album only on its first element, so
+// this helper moves the first found caption/text and its send options to the
+// first supported media message in the group.
+//
+// Supported media types: Photo, Video, Document, Audio, Animation.
+// Voice, VideoNote, Sticker are not valid album items and are skipped.
+func BuildMediaGroup(msgs []*tele.Message) ([]*tele.Message, bool) {
 	if len(msgs) == 0 {
-		return nil, nil, false
+		return nil, false
 	}
 
 	// Sort by MessageID to preserve order
@@ -25,50 +28,84 @@ func BuildMediaGroup(msgs []*tele.Message) (tele.Album, *tele.SendOptions, bool)
 		return sorted[i].ID < sorted[j].ID
 	})
 
-	var album tele.Album
-	var caption string
-	var sendOptions *tele.SendOptions
+	mediaGroup := make([]*tele.Message, 0, len(sorted))
+	var captionSource *tele.Message
 
 	for _, msg := range sorted {
-		item := ExtractInputtable(msg)
-		if item == nil {
+		mediaMessage := buildMediaGroupMessage(msg)
+		if mediaMessage == nil {
 			continue
 		}
-		album = append(album, item)
-		if msg.Caption != "" || msg.Text != "" {
-			caption = msg.Caption
-			sendOptions = getSendOptions(msg)
+		mediaGroup = append(mediaGroup, mediaMessage)
+		if captionSource == nil && (msg.Caption != "" || msg.Text != "") {
+			captionSource = msg
 		}
 	}
 
-	if len(album) == 0 {
-		return nil, nil,false
+	if len(mediaGroup) == 0 {
+		return nil, false
 	}
 
-	album.SetCaption(caption)
+	if captionSource != nil {
+		caption := captionSource.Caption
+		if caption == "" {
+			caption = captionSource.Text
+		}
+		setMediaGroupCaption(mediaGroup[0], caption)
+		HideSendOptsIntoMessage(mediaGroup[0], getSendOptions(captionSource))
+	}
 
-	return album, sendOptions, true
+	return mediaGroup, true
 }
 
-// ExtractInputtable extracts Inputtable media from a message.
-// Returns nil for unsupported types (Voice, VideoNote, Sticker, etc.)
-func ExtractInputtable(msg *tele.Message) tele.Inputtable {
+func buildMediaGroupMessage(msg *tele.Message) *tele.Message {
 	if msg == nil {
 		return nil
 	}
 
 	switch {
 	case msg.Photo != nil:
-		return copyPhoto(msg.Photo, msg.Caption,  msg.CaptionAbove, msg.HasMediaSpoiler)
+		return &tele.Message{
+			Photo: copyPhoto(msg.Photo, "", msg.CaptionAbove, msg.HasMediaSpoiler),
+		}
 	case msg.Video != nil:
-		return copyVideo(msg.Video, msg.Caption,  msg.CaptionAbove, msg.HasMediaSpoiler)
+		return &tele.Message{
+			Video: copyVideo(msg.Video, "", msg.CaptionAbove, msg.HasMediaSpoiler),
+		}
 	case msg.Document != nil:
-		return copyDocument(msg.Document, msg.Caption)
+		return &tele.Message{
+			Document: copyDocument(msg.Document, ""),
+		}
 	case msg.Audio != nil:
-		return copyAudio(msg.Audio, msg.Caption)
+		return &tele.Message{
+			Audio: copyAudio(msg.Audio, ""),
+		}
 	case msg.Animation != nil:
-		return copyAnimation(msg.Animation, msg.Caption,  msg.HasMediaSpoiler)
+		return &tele.Message{
+			Animation: copyAnimation(msg.Animation, "", msg.HasMediaSpoiler),
+		}
 	default:
 		return nil
+	}
+}
+
+func setMediaGroupCaption(msg *tele.Message, caption string) {
+	if msg == nil {
+		return
+	}
+
+	msg.Caption = caption
+
+	switch {
+	case msg.Photo != nil:
+		msg.Photo.Caption = caption
+	case msg.Video != nil:
+		msg.Video.Caption = caption
+	case msg.Document != nil:
+		msg.Document.Caption = caption
+	case msg.Audio != nil:
+		msg.Audio.Caption = caption
+	case msg.Animation != nil:
+		msg.Animation.Caption = caption
 	}
 }
