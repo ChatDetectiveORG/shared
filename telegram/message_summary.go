@@ -18,7 +18,9 @@ func HideSendOptsIntoMessage(msg *tele.Message, sendOptions *tele.SendOptions) *
 	msg.ReplyMarkup = sendOptions.ReplyMarkup
 	msg.PreviewOptions.Disabled = sendOptions.DisableWebPagePreview
 	
-	msg.Entities = sendOptions.Entities
+	for _, e := range sendOptions.Entities {
+		msg.Entities = append(msg.Entities, e)
+	}
 	msg.Protected = sendOptions.Protected
 	msg.HasMediaSpoiler = sendOptions.HasSpoiler
 	msg.EffectID = sendOptions.EffectID
