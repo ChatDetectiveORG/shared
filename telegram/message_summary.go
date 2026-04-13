@@ -13,6 +13,19 @@ const (
 	maxSummaryTextLen = 3900
 )
 
+func HideSendOptsIntoMessage(msg *tele.Message, sendOptions *tele.SendOptions) *tele.Message {
+	msg.ReplyTo = sendOptions.ReplyTo
+	msg.ReplyMarkup = sendOptions.ReplyMarkup
+	msg.PreviewOptions.Disabled = sendOptions.DisableWebPagePreview
+	
+	msg.Entities = sendOptions.Entities
+	msg.Protected = sendOptions.Protected
+	msg.HasMediaSpoiler = sendOptions.HasSpoiler
+	msg.EffectID = sendOptions.EffectID
+
+	return msg
+}
+
 type summaryTextBuilder struct {
 	sb       strings.Builder
 	entities tele.Entities
