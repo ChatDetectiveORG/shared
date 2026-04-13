@@ -30,7 +30,7 @@ func BuildMediaGroup(msgs []*tele.Message) (tele.Album, *tele.SendOptions, bool)
 	var sendOptions *tele.SendOptions
 
 	for _, msg := range sorted {
-		item := extractInputtable(msg)
+		item := ExtractInputtable(msg)
 		if item == nil {
 			continue
 		}
@@ -50,9 +50,9 @@ func BuildMediaGroup(msgs []*tele.Message) (tele.Album, *tele.SendOptions, bool)
 	return album, sendOptions, true
 }
 
-// extractInputtable extracts Inputtable media from a message.
+// ExtractInputtable extracts Inputtable media from a message.
 // Returns nil for unsupported types (Voice, VideoNote, Sticker, etc.)
-func extractInputtable(msg *tele.Message) tele.Inputtable {
+func ExtractInputtable(msg *tele.Message) tele.Inputtable {
 	if msg == nil {
 		return nil
 	}
