@@ -7,6 +7,26 @@ import (
 	tele "gopkg.in/telebot.v4"
 )
 
+func getSendOptions(msg *tele.Message) *tele.SendOptions {
+	sendOptions := &tele.SendOptions{}
+	sendOptions.ReplyTo = msg.ReplyTo
+
+	sendOptions.ReplyMarkup = msg.ReplyMarkup
+	sendOptions.DisableWebPagePreview = msg.PreviewOptions.Disabled
+	switch {
+	case msg.Entities != nil:
+		sendOptions.Entities = msg.Entities
+	case msg.CaptionEntities != nil:
+		sendOptions.Entities = msg.CaptionEntities
+	}
+	sendOptions.AllowWithoutReply = true
+	sendOptions.Protected = msg.Protected
+	sendOptions.HasSpoiler = msg.HasMediaSpoiler
+	sendOptions.EffectID = msg.EffectID
+
+	return sendOptions
+}
+
 // TgMessageToSendable converts a tele.Message to a sendable object (string or tele.Sendable).
 // The result can be passed to bot.Send() or bot.SendAlbum() for media groups.
 //
@@ -16,61 +36,63 @@ import (
 //
 // For text messages with entities (formatting), pass &tele.SendOptions{Entities: msg.Entities}
 // as additional opts to bot.Send() to preserve bold, italic, links, etc.
-func TgMessageToSendable(msg *tele.Message) (interface{}, bool) {
+func TgMessageToSendable(msg *tele.Message) (interface{}, *tele.SendOptions, bool) {
 	if msg == nil {
-		return nil, false
+		return nil, nil, false
 	}
 
 	// For media groups: prefer BuildMediaGroup when you have all messages.
 	// Here we still return the single media item as fallback.
 
+	autoSendOptions := getSendOptions(msg)
+
 	// Content types (order matters - check media before text for messages with both)
 	switch {
 	case msg.Photo != nil:
-		return copyPhoto(msg.Photo, msg.Caption, msg.CaptionEntities, msg.CaptionAbove, msg.HasMediaSpoiler), true
+		return copyPhoto(msg.Photo, msg.Caption, msg.CaptionAbove, msg.HasMediaSpoiler), autoSendOptions, true
 	case msg.Video != nil:
-		return copyVideo(msg.Video, msg.Caption, msg.CaptionEntities, msg.CaptionAbove, msg.HasMediaSpoiler), true
+		return copyVideo(msg.Video, msg.Caption, msg.CaptionAbove, msg.HasMediaSpoiler), autoSendOptions, true
 	case msg.Document != nil:
-		return copyDocument(msg.Document, msg.Caption, msg.CaptionEntities), true
+		return copyDocument(msg.Document, msg.Caption), autoSendOptions, true
 	case msg.Audio != nil:
-		return copyAudio(msg.Audio, msg.Caption, msg.CaptionEntities), true
+		return copyAudio(msg.Audio, msg.Caption), autoSendOptions, true
 	case msg.Voice != nil:
-		return copyVoice(msg.Voice, msg.Caption, msg.CaptionEntities), true
+		return copyVoice(msg.Voice, msg.Caption), autoSendOptions, true
 	case msg.VideoNote != nil:
-		return copyVideoNote(msg.VideoNote), true
+		return copyVideoNote(msg.VideoNote), autoSendOptions, true
 	case msg.Sticker != nil:
-		return copySticker(msg.Sticker), true
+		return copySticker(msg.Sticker), autoSendOptions, true
 	case msg.Animation != nil:
-		return copyAnimation(msg.Animation, msg.Caption, msg.CaptionEntities, msg.HasMediaSpoiler), true
+		return copyAnimation(msg.Animation, msg.Caption, msg.HasMediaSpoiler), autoSendOptions, true
 	case msg.Location != nil:
-		return copyLocation(msg.Location), true
+		return copyLocation(msg.Location), autoSendOptions, true
 	case msg.Venue != nil:
-		return copyVenue(msg.Venue), true
+		return copyVenue(msg.Venue), autoSendOptions, true
 	case msg.Contact != nil:
-		return copyContact(msg.Contact), true
+		return copyContact(msg.Contact), autoSendOptions, true
 	case msg.Dice != nil:
-		return copyDice(msg.Dice), true
+		return copyDice(msg.Dice), autoSendOptions, true
 	case msg.Poll != nil:
-		return copyPoll(msg.Poll), true
+		return copyPoll(msg.Poll), autoSendOptions, true
 	case msg.Invoice != nil:
-		return copyInvoice(msg.Invoice), true
+		return copyInvoice(msg.Invoice), autoSendOptions, true
 	case msg.Game != nil:
-		return copyGame(msg.Game), true
+		return copyGame(msg.Game), autoSendOptions, true
 	case len(msg.PaidMedia.PaidMedia) > 0:
-		return fmt.Sprintf("💰 Платный контент (%d медиа, %d звёзд)", len(msg.PaidMedia.PaidMedia), msg.PaidMedia.Stars), true
+		return fmt.Sprintf("💰 Платный контент (%d медиа, %d звёзд)", len(msg.PaidMedia.PaidMedia), msg.PaidMedia.Stars), autoSendOptions, true
 	case msg.Text != "" || msg.Caption != "":
 		text := msg.Text
 		if text == "" {
 			text = msg.Caption
 		}
-		return text, true
+		return text, autoSendOptions, true
 	default:
 		// Service messages and other types - format as text
-		return formatServiceMessage(msg), true
+		return formatServiceMessage(msg), autoSendOptions, true
 	}
 }
 
-func copyPhoto(p *tele.Photo, caption string, entities tele.Entities, captionAbove, hasSpoiler bool) *tele.Photo {
+func copyPhoto(p *tele.Photo, caption string, captionAbove, hasSpoiler bool) *tele.Photo {
 	if p == nil {
 		return nil
 	}
@@ -84,7 +106,7 @@ func copyPhoto(p *tele.Photo, caption string, entities tele.Entities, captionAbo
 	}
 }
 
-func copyVideo(v *tele.Video, caption string, entities tele.Entities, captionAbove, hasSpoiler bool) *tele.Video {
+func copyVideo(v *tele.Video, caption string, captionAbove, hasSpoiler bool) *tele.Video {
 	if v == nil {
 		return nil
 	}
@@ -105,7 +127,7 @@ func copyVideo(v *tele.Video, caption string, entities tele.Entities, captionAbo
 	}
 }
 
-func copyDocument(d *tele.Document, caption string, entities tele.Entities) *tele.Document {
+func copyDocument(d *tele.Document, caption string) *tele.Document {
 	if d == nil {
 		return nil
 	}
@@ -119,7 +141,7 @@ func copyDocument(d *tele.Document, caption string, entities tele.Entities) *tel
 	}
 }
 
-func copyAudio(a *tele.Audio, caption string, entities tele.Entities) *tele.Audio {
+func copyAudio(a *tele.Audio, caption string) *tele.Audio {
 	if a == nil {
 		return nil
 	}
@@ -135,7 +157,7 @@ func copyAudio(a *tele.Audio, caption string, entities tele.Entities) *tele.Audi
 	}
 }
 
-func copyVoice(v *tele.Voice, caption string, entities tele.Entities) *tele.Voice {
+func copyVoice(v *tele.Voice, caption string) *tele.Voice {
 	if v == nil {
 		return nil
 	}
@@ -180,7 +202,7 @@ func copySticker(s *tele.Sticker) *tele.Sticker {
 	}
 }
 
-func copyAnimation(a *tele.Animation, caption string, entities tele.Entities, hasSpoiler bool) *tele.Animation {
+func copyAnimation(a *tele.Animation, caption string, hasSpoiler bool) *tele.Animation {
 	if a == nil {
 		return nil
 	}
@@ -350,6 +372,8 @@ func formatServiceMessage(msg *tele.Message) string {
 		parts = append(parts, "📋 Топик открыт")
 	case msg.BoostAdded != nil:
 		parts = append(parts, "⭐ Усиление чата")
+	case msg.Story != nil:
+		parts = append(parts, "📹 История")
 	default:
 		parts = append(parts, "📢 Служебное сообщение")
 	}

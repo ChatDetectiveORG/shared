@@ -13,9 +13,9 @@ import (
 //
 // Supported media types for albums: Photo, Video, Document, Audio, Animation.
 // Voice, VideoNote, Sticker are NOT supported in media groups by Telegram API.
-func BuildMediaGroup(msgs []*tele.Message) (tele.Album, string, bool) {
+func BuildMediaGroup(msgs []*tele.Message) (tele.Album, *tele.SendOptions, bool) {
 	if len(msgs) == 0 {
-		return nil, "", false
+		return nil, nil, false
 	}
 
 	// Sort by MessageID to preserve order
@@ -27,6 +27,7 @@ func BuildMediaGroup(msgs []*tele.Message) (tele.Album, string, bool) {
 
 	var album tele.Album
 	var caption string
+	var sendOptions *tele.SendOptions
 
 	for _, msg := range sorted {
 		item := extractInputtable(msg)
@@ -34,24 +35,19 @@ func BuildMediaGroup(msgs []*tele.Message) (tele.Album, string, bool) {
 			continue
 		}
 		album = append(album, item)
-		if caption == "" && (msg.Caption != "" || msg.Text != "") {
+		if msg.Caption != "" || msg.Text != "" {
 			caption = msg.Caption
-			if caption == "" {
-				caption = msg.Text
-			}
+			sendOptions = getSendOptions(msg)
 		}
 	}
 
 	if len(album) == 0 {
-		return nil, "", false
+		return nil, nil,false
 	}
 
-	// Set caption on first item (Telegram takes caption from first media in group)
-	if caption != "" && len(album) > 0 {
-		album.SetCaption(caption)
-	}
+	album.SetCaption(caption)
 
-	return album, caption, true
+	return album, sendOptions, true
 }
 
 // extractInputtable extracts Inputtable media from a message.
@@ -63,15 +59,15 @@ func extractInputtable(msg *tele.Message) tele.Inputtable {
 
 	switch {
 	case msg.Photo != nil:
-		return copyPhoto(msg.Photo, msg.Caption, msg.CaptionEntities, msg.CaptionAbove, msg.HasMediaSpoiler)
+		return copyPhoto(msg.Photo, msg.Caption,  msg.CaptionAbove, msg.HasMediaSpoiler)
 	case msg.Video != nil:
-		return copyVideo(msg.Video, msg.Caption, msg.CaptionEntities, msg.CaptionAbove, msg.HasMediaSpoiler)
+		return copyVideo(msg.Video, msg.Caption,  msg.CaptionAbove, msg.HasMediaSpoiler)
 	case msg.Document != nil:
-		return copyDocument(msg.Document, msg.Caption, msg.CaptionEntities)
+		return copyDocument(msg.Document, msg.Caption)
 	case msg.Audio != nil:
-		return copyAudio(msg.Audio, msg.Caption, msg.CaptionEntities)
+		return copyAudio(msg.Audio, msg.Caption)
 	case msg.Animation != nil:
-		return copyAnimation(msg.Animation, msg.Caption, msg.CaptionEntities, msg.HasMediaSpoiler)
+		return copyAnimation(msg.Animation, msg.Caption,  msg.HasMediaSpoiler)
 	default:
 		return nil
 	}
