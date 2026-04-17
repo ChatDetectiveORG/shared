@@ -25,17 +25,17 @@ type Router struct {
 	OutgoingExchange   string
 	SendResultExchange string
 
-	wg    *sync.WaitGroup
-	ctx   context.Context
-	mu    sync.Mutex
+	wg       *sync.WaitGroup
+	ctx      context.Context
+	mu       sync.Mutex
 	replicas map[string]chan tele.Update
 
 	outgoingMu          sync.Mutex
 	outgoingStarted     bool
 	sendResultConsumers map[int]bool
 	sendWaiters         *sync.Map
-	outgoingExchange   string
-	sendResultExchange string
+	outgoingExchange    string
+	sendResultExchange  string
 }
 
 func (r *Router) shardRoutingKey(sessionID string) string {

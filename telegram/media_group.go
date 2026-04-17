@@ -6,17 +6,33 @@ import (
 	tele "gopkg.in/telebot.v4"
 )
 
-// BuildMediaGroup normalizes Telegram album messages into project-friendly
-// tele.Message payloads that can be serialized and sent via telegram.message.send.
-// Messages should already belong to the same media_group_id.
-//
-// Telegram allows a shared caption for an album only on its first element, so
-// this helper moves the first found caption/text and its send options to the
-// first supported media message in the group.
-//
-// Supported media types: Photo, Video, Document, Audio, Animation.
-// Voice, VideoNote, Sticker are not valid album items and are skipped.
-func BuildMediaGroup(msgs []*tele.Message) ([]*tele.Message, bool) {
+type MediaGroup struct {
+	Chat     *tele.Chat      `json:"chat,omitempty"`
+	Messages []*tele.Message `json:"messages"`
+	Silent   bool            `json:"silent,omitempty"`
+}
+
+type albumInputtable struct {
+	media      tele.Inputtable
+	inputMedia tele.InputMedia
+}
+
+func (a *albumInputtable) MediaType() string {
+	return a.media.MediaType()
+}
+
+func (a *albumInputtable) MediaFile() *tele.File {
+	return a.media.MediaFile()
+}
+
+func (a *albumInputtable) InputMedia() tele.InputMedia {
+	return a.inputMedia
+}
+
+// BuildMediaGroup normalizes Telegram album messages into a serializable
+// project payload that can be published and later sent as a native Telegram
+// media group.
+func BuildMediaGroup(msgs []*tele.Message) (*MediaGroup, bool) {
 	if len(msgs) == 0 {
 		return nil, false
 	}
@@ -28,7 +44,9 @@ func BuildMediaGroup(msgs []*tele.Message) ([]*tele.Message, bool) {
 		return sorted[i].ID < sorted[j].ID
 	})
 
-	mediaGroup := make([]*tele.Message, 0, len(sorted))
+	mediaGroup := &MediaGroup{
+		Messages: make([]*tele.Message, 0, len(sorted)),
+	}
 	var captionSource *tele.Message
 
 	for _, msg := range sorted {
@@ -36,13 +54,13 @@ func BuildMediaGroup(msgs []*tele.Message) ([]*tele.Message, bool) {
 		if mediaMessage == nil {
 			continue
 		}
-		mediaGroup = append(mediaGroup, mediaMessage)
+		mediaGroup.Messages = append(mediaGroup.Messages, mediaMessage)
 		if captionSource == nil && (msg.Caption != "" || msg.Text != "") {
 			captionSource = msg
 		}
 	}
 
-	if len(mediaGroup) == 0 {
+	if len(mediaGroup.Messages) == 0 {
 		return nil, false
 	}
 
@@ -51,11 +69,35 @@ func BuildMediaGroup(msgs []*tele.Message) ([]*tele.Message, bool) {
 		if caption == "" {
 			caption = captionSource.Text
 		}
-		setMediaGroupCaption(mediaGroup[0], caption)
-		HideSendOptsIntoMessage(mediaGroup[0], getSendOptions(captionSource))
+		setMediaGroupCaption(mediaGroup.Messages[0], caption)
+		HideSendOptsIntoMessage(mediaGroup.Messages[0], getSendOptions(captionSource))
 	}
 
 	return mediaGroup, true
+}
+
+func (mg *MediaGroup) ToAlbum() (tele.Album, bool) {
+	if mg == nil || len(mg.Messages) == 0 {
+		return nil, false
+	}
+
+	album := make(tele.Album, 0, len(mg.Messages))
+	for _, msg := range mg.Messages {
+		item := ExtractInputtable(msg)
+		if item == nil {
+			return nil, false
+		}
+
+		inputMedia := item.InputMedia()
+		inputMedia.Entities = messageCaptionEntities(msg)
+
+		album = append(album, &albumInputtable{
+			media:      item,
+			inputMedia: inputMedia,
+		})
+	}
+
+	return album, len(album) > 0
 }
 
 func buildMediaGroupMessage(msg *tele.Message) *tele.Message {
@@ -82,8 +124,30 @@ func buildMediaGroupMessage(msg *tele.Message) *tele.Message {
 		}
 	case msg.Animation != nil:
 		return &tele.Message{
-			Animation: copyAnimation(msg.Animation, "", msg.HasMediaSpoiler),
+			Animation: copyAnimation(msg.Animation, "", msg.CaptionAbove, msg.HasMediaSpoiler),
 		}
+	default:
+		return nil
+	}
+}
+
+// ExtractInputtable extracts album-compatible media from a message.
+func ExtractInputtable(msg *tele.Message) tele.Inputtable {
+	if msg == nil {
+		return nil
+	}
+
+	switch {
+	case msg.Photo != nil:
+		return copyPhoto(msg.Photo, msg.Caption, msg.CaptionAbove, msg.HasMediaSpoiler)
+	case msg.Video != nil:
+		return copyVideo(msg.Video, msg.Caption, msg.CaptionAbove, msg.HasMediaSpoiler)
+	case msg.Document != nil:
+		return copyDocument(msg.Document, msg.Caption)
+	case msg.Audio != nil:
+		return copyAudio(msg.Audio, msg.Caption)
+	case msg.Animation != nil:
+		return copyAnimation(msg.Animation, msg.Caption, msg.CaptionAbove, msg.HasMediaSpoiler)
 	default:
 		return nil
 	}
@@ -108,4 +172,17 @@ func setMediaGroupCaption(msg *tele.Message, caption string) {
 	case msg.Animation != nil:
 		msg.Animation.Caption = caption
 	}
+}
+
+func messageCaptionEntities(msg *tele.Message) tele.Entities {
+	if msg == nil {
+		return nil
+	}
+	if len(msg.CaptionEntities) > 0 {
+		return msg.CaptionEntities
+	}
+	if len(msg.Entities) > 0 {
+		return msg.Entities
+	}
+	return nil
 }

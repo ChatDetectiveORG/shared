@@ -8,11 +8,17 @@ import (
 )
 
 func getSendOptions(msg *tele.Message) *tele.SendOptions {
+	if msg == nil {
+		return &tele.SendOptions{}
+	}
+
 	sendOptions := &tele.SendOptions{}
 	sendOptions.ReplyTo = msg.ReplyTo
 
 	sendOptions.ReplyMarkup = msg.ReplyMarkup
-	sendOptions.DisableWebPagePreview = msg.PreviewOptions.Disabled
+	if msg.PreviewOptions != nil {
+		sendOptions.DisableWebPagePreview = msg.PreviewOptions.Disabled
+	}
 	switch {
 	case msg.Entities != nil:
 		sendOptions.Entities = msg.Entities
@@ -63,7 +69,7 @@ func TgMessageToSendable(msg *tele.Message) (interface{}, *tele.SendOptions, boo
 	case msg.Sticker != nil:
 		return copySticker(msg.Sticker), autoSendOptions, true
 	case msg.Animation != nil:
-		return copyAnimation(msg.Animation, msg.Caption, msg.HasMediaSpoiler), autoSendOptions, true
+		return copyAnimation(msg.Animation, msg.Caption, msg.CaptionAbove, msg.HasMediaSpoiler), autoSendOptions, true
 	case msg.Location != nil:
 		return copyLocation(msg.Location), autoSendOptions, true
 	case msg.Venue != nil:
@@ -111,19 +117,19 @@ func copyVideo(v *tele.Video, caption string, captionAbove, hasSpoiler bool) *te
 		return nil
 	}
 	return &tele.Video{
-		File:              v.File,
-		Width:             v.Width,
-		Height:            v.Height,
-		Duration:          v.Duration,
-		Caption:           caption,
-		Thumbnail:         v.Thumbnail,
-		Streaming:         v.Streaming,
-		MIME:              v.MIME,
-		FileName:          v.FileName,
-		HasSpoiler:        hasSpoiler || v.HasSpoiler,
-		CaptionAbove:      captionAbove || v.CaptionAbove,
-		Cover:             v.Cover,
-		StartTimestamp:    v.StartTimestamp,
+		File:           v.File,
+		Width:          v.Width,
+		Height:         v.Height,
+		Duration:       v.Duration,
+		Caption:        caption,
+		Thumbnail:      v.Thumbnail,
+		Streaming:      v.Streaming,
+		MIME:           v.MIME,
+		FileName:       v.FileName,
+		HasSpoiler:     hasSpoiler || v.HasSpoiler,
+		CaptionAbove:   captionAbove || v.CaptionAbove,
+		Cover:          v.Cover,
+		StartTimestamp: v.StartTimestamp,
 	}
 }
 
@@ -132,12 +138,12 @@ func copyDocument(d *tele.Document, caption string) *tele.Document {
 		return nil
 	}
 	return &tele.Document{
-		File:                   d.File,
-		Thumbnail:              d.Thumbnail,
-		Caption:                caption,
-		MIME:                   d.MIME,
-		FileName:               d.FileName,
-		DisableTypeDetection:   d.DisableTypeDetection,
+		File:                 d.File,
+		Thumbnail:            d.Thumbnail,
+		Caption:              caption,
+		MIME:                 d.MIME,
+		FileName:             d.FileName,
+		DisableTypeDetection: d.DisableTypeDetection,
 	}
 }
 
@@ -165,7 +171,7 @@ func copyVoice(v *tele.Voice, caption string) *tele.Voice {
 		File:     v.File,
 		Duration: v.Duration,
 		Caption:  caption,
-		MIME:    v.MIME,
+		MIME:     v.MIME,
 	}
 }
 
@@ -186,37 +192,37 @@ func copySticker(s *tele.Sticker) *tele.Sticker {
 		return nil
 	}
 	return &tele.Sticker{
-		File:              s.File,
-		Type:              s.Type,
-		Width:             s.Width,
-		Height:            s.Height,
-		Animated:          s.Animated,
-		Video:             s.Video,
-		Thumbnail:         s.Thumbnail,
-		Emoji:             s.Emoji,
-		SetName:           s.SetName,
-		PremiumAnimation:  s.PremiumAnimation,
-		MaskPosition:      s.MaskPosition,
-		CustomEmojiID:     s.CustomEmojiID,
-		Repaint:           s.Repaint,
+		File:             s.File,
+		Type:             s.Type,
+		Width:            s.Width,
+		Height:           s.Height,
+		Animated:         s.Animated,
+		Video:            s.Video,
+		Thumbnail:        s.Thumbnail,
+		Emoji:            s.Emoji,
+		SetName:          s.SetName,
+		PremiumAnimation: s.PremiumAnimation,
+		MaskPosition:     s.MaskPosition,
+		CustomEmojiID:    s.CustomEmojiID,
+		Repaint:          s.Repaint,
 	}
 }
 
-func copyAnimation(a *tele.Animation, caption string, hasSpoiler bool) *tele.Animation {
+func copyAnimation(a *tele.Animation, caption string, captionAbove, hasSpoiler bool) *tele.Animation {
 	if a == nil {
 		return nil
 	}
 	return &tele.Animation{
 		File:         a.File,
-		Width:       a.Width,
-		Height:      a.Height,
-		Duration:    a.Duration,
-		Caption:     caption,
-		Thumbnail:   a.Thumbnail,
-		MIME:       a.MIME,
-		FileName:   a.FileName,
-		HasSpoiler: hasSpoiler || a.HasSpoiler,
-		CaptionAbove: a.CaptionAbove,
+		Width:        a.Width,
+		Height:       a.Height,
+		Duration:     a.Duration,
+		Caption:      caption,
+		Thumbnail:    a.Thumbnail,
+		MIME:         a.MIME,
+		FileName:     a.FileName,
+		HasSpoiler:   hasSpoiler || a.HasSpoiler,
+		CaptionAbove: captionAbove || a.CaptionAbove,
 	}
 }
 
@@ -225,11 +231,11 @@ func copyLocation(l *tele.Location) *tele.Location {
 		return nil
 	}
 	loc := &tele.Location{
-		Lat:       l.Lat,
-		Lng:       l.Lng,
-		Heading:   l.Heading,
+		Lat:         l.Lat,
+		Lng:         l.Lng,
+		Heading:     l.Heading,
 		AlertRadius: l.AlertRadius,
-		LivePeriod: l.LivePeriod,
+		LivePeriod:  l.LivePeriod,
 	}
 	if l.HorizontalAccuracy != nil {
 		acc := *l.HorizontalAccuracy
@@ -243,12 +249,12 @@ func copyVenue(v *tele.Venue) *tele.Venue {
 		return nil
 	}
 	return &tele.Venue{
-		Location:       v.Location,
-		Title:         v.Title,
-		Address:       v.Address,
-		FoursquareID:  v.FoursquareID,
-		FoursquareType: v.FoursquareType,
-		GooglePlaceID: v.GooglePlaceID,
+		Location:        v.Location,
+		Title:           v.Title,
+		Address:         v.Address,
+		FoursquareID:    v.FoursquareID,
+		FoursquareType:  v.FoursquareType,
+		GooglePlaceID:   v.GooglePlaceID,
 		GooglePlaceType: v.GooglePlaceType,
 	}
 }
@@ -259,10 +265,10 @@ func copyContact(c *tele.Contact) *tele.Contact {
 	}
 	return &tele.Contact{
 		PhoneNumber: c.PhoneNumber,
-		FirstName:  c.FirstName,
-		LastName:   c.LastName,
-		UserID:     c.UserID,
-		VCard:      c.VCard,
+		FirstName:   c.FirstName,
+		LastName:    c.LastName,
+		UserID:      c.UserID,
+		VCard:       c.VCard,
 	}
 }
 
@@ -281,18 +287,29 @@ func copyPoll(p *tele.Poll) *tele.Poll {
 		return nil
 	}
 	return &tele.Poll{
-		Type:           p.Type,
-		Question:       p.Question,
-		Options:        p.Options,
-		VoterCount:     p.VoterCount,
-		Closed:         p.Closed,
-		Anonymous:      p.Anonymous,
-		MultipleAnswers: p.MultipleAnswers,
-		CorrectOption:  p.CorrectOption,
-		Explanation:    p.Explanation,
-		ParseMode:      p.ParseMode,
-		OpenPeriod:     p.OpenPeriod,
-		CloseUnixdate:  p.CloseUnixdate,
+		Type:                   p.Type,
+		Question:               p.Question,
+		Options:                append([]tele.PollOption(nil), p.Options...),
+		VoterCount:             p.VoterCount,
+		Closed:                 p.Closed,
+		Anonymous:              p.Anonymous,
+		MultipleAnswers:        p.MultipleAnswers,
+		AllowsRevoting:         p.AllowsRevoting,
+		ShuffleOptions:         p.ShuffleOptions,
+		AllowAddingOptions:     p.AllowAddingOptions,
+		HideResultsUntilCloses: p.HideResultsUntilCloses,
+		CorrectOptionIDs:       append([]int(nil), p.CorrectOptionIDs...),
+		CorrectOption:          p.CorrectOption,
+		Explanation:            p.Explanation,
+		ParseMode:              p.ParseMode,
+		Entities:               append([]tele.MessageEntity(nil), p.Entities...),
+		QuestionParseMode:      p.QuestionParseMode,
+		QuestionEntities:       append([]tele.MessageEntity(nil), p.QuestionEntities...),
+		Description:            p.Description,
+		DescriptionParseMode:   p.DescriptionParseMode,
+		DescriptionEntities:    append([]tele.MessageEntity(nil), p.DescriptionEntities...),
+		OpenPeriod:             p.OpenPeriod,
+		CloseUnixdate:          p.CloseUnixdate,
 	}
 }
 

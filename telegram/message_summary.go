@@ -14,10 +14,25 @@ const (
 )
 
 func HideSendOptsIntoMessage(msg *tele.Message, sendOptions *tele.SendOptions) *tele.Message {
-	msg.ReplyTo = sendOptions.ReplyTo
+	if msg == nil {
+		return nil
+	}
+	if sendOptions == nil {
+		return msg
+	}
+
+	if msg.ReplyTo == nil {
+		msg.ReplyTo = sendOptions.ReplyTo
+	}
+
 	msg.ReplyMarkup = sendOptions.ReplyMarkup
-	msg.PreviewOptions.Disabled = sendOptions.DisableWebPagePreview
-	
+	if sendOptions.DisableWebPagePreview {
+		if msg.PreviewOptions == nil {
+			msg.PreviewOptions = &tele.PreviewOptions{}
+		}
+		msg.PreviewOptions.Disabled = true
+	}
+
 	for _, e := range sendOptions.Entities {
 		msg.Entities = append(msg.Entities, e)
 	}

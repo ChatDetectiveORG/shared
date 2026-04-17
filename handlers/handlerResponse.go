@@ -10,6 +10,20 @@ import (
 type SendResult struct {
 	CorrelationID string          `json:"correlation_id"`
 	SentMessage   *tele.Message   `json:"message"`
+	SentAlbum     []*tele.Message `json:"album,omitempty"`
 	Error         *e.ErrorInfo    `json:"error"`
 	IsSuccess     bool            `json:"is_success"`
+}
+
+func (sr *SendResult) FirstSentMessage() *tele.Message {
+	if sr == nil {
+		return nil
+	}
+	if sr.SentMessage != nil {
+		return sr.SentMessage
+	}
+	if len(sr.SentAlbum) == 0 {
+		return nil
+	}
+	return sr.SentAlbum[0]
 }
