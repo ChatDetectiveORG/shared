@@ -7,19 +7,19 @@ import (
 	tele "gopkg.in/telebot.v4"
 )
 
-func TestParseOutgoingRequestEnvelopeMessage(t *testing.T) {
+func TestOutgoingRequestEnvelopeMessageJSONRoundTrip(t *testing.T) {
 	payload, err := json.Marshal(NewOutgoingMessageRequest(&tele.Message{
 		ID:   42,
 		Text: "hello",
 		Chat: &tele.Chat{ID: 1001},
-	}))
+	}, false))
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}
 
-	request, err := ParseOutgoingRequest(payload)
-	if err != nil {
-		t.Fatalf("parse outgoing request: %v", err)
+	var request OutgoingRequest
+	if err := json.Unmarshal(payload, &request); err != nil {
+		t.Fatalf("unmarshal outgoing request: %v", err)
 	}
 	if request.Kind != OutgoingRequestKindMessage {
 		t.Fatalf("expected kind %q, got %q", OutgoingRequestKindMessage, request.Kind)
@@ -30,23 +30,26 @@ func TestParseOutgoingRequestEnvelopeMessage(t *testing.T) {
 	if request.Message.Text != "hello" {
 		t.Fatalf("expected text %q, got %q", "hello", request.Message.Text)
 	}
+	if request.ParseModeEnabled {
+		t.Fatal("expected parse_mode_enabled false")
+	}
 }
 
-func TestParseOutgoingRequestEnvelopeAlbum(t *testing.T) {
+func TestOutgoingRequestEnvelopeAlbumJSONRoundTrip(t *testing.T) {
 	payload, err := json.Marshal(NewOutgoingAlbumRequest(&MediaGroup{
 		Chat: &tele.Chat{ID: 1001},
 		Messages: []*tele.Message{
 			{Photo: &tele.Photo{}},
 		},
 		Silent: true,
-	}))
+	}, false))
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}
 
-	request, err := ParseOutgoingRequest(payload)
-	if err != nil {
-		t.Fatalf("parse outgoing request: %v", err)
+	var request OutgoingRequest
+	if err := json.Unmarshal(payload, &request); err != nil {
+		t.Fatalf("unmarshal outgoing request: %v", err)
 	}
 	if request.Kind != OutgoingRequestKindAlbum {
 		t.Fatalf("expected kind %q, got %q", OutgoingRequestKindAlbum, request.Kind)
@@ -62,24 +65,19 @@ func TestParseOutgoingRequestEnvelopeAlbum(t *testing.T) {
 	}
 }
 
-func TestParseOutgoingRequestLegacyMessagePayload(t *testing.T) {
-	payload, err := json.Marshal(&tele.Message{
-		ID:   7,
-		Text: "legacy",
-		Chat: &tele.Chat{ID: 99},
-	})
+func TestOutgoingRequestParseModeEnabledJSONRoundTrip(t *testing.T) {
+	payload, err := json.Marshal(NewOutgoingMessageRequest(&tele.Message{
+		Text: "x",
+		Chat: &tele.Chat{ID: 1},
+	}, true))
 	if err != nil {
-		t.Fatalf("marshal legacy payload: %v", err)
+		t.Fatalf("marshal: %v", err)
 	}
-
-	request, err := ParseOutgoingRequest(payload)
-	if err != nil {
-		t.Fatalf("parse legacy outgoing request: %v", err)
+	var request OutgoingRequest
+	if err := json.Unmarshal(payload, &request); err != nil {
+		t.Fatalf("unmarshal: %v", err)
 	}
-	if request.Kind != OutgoingRequestKindMessage {
-		t.Fatalf("expected kind %q, got %q", OutgoingRequestKindMessage, request.Kind)
-	}
-	if request.Message == nil || request.Message.Text != "legacy" {
-		t.Fatalf("expected legacy message text %q, got %#v", "legacy", request.Message)
+	if !request.ParseModeEnabled {
+		t.Fatal("expected parse_mode_enabled true after round-trip")
 	}
 }

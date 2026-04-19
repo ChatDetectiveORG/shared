@@ -20,6 +20,7 @@ type HandlerChainHashe struct {
 	jobs    chan *publishEnvelope
 	waiters *sync.Map
 	runID   string
+	parseModeEnabled bool
 }
 
 func (hch HandlerChainHashe) Init(jobs chan *publishEnvelope, waiters *sync.Map, runID string) *HandlerChainHashe {
@@ -28,7 +29,14 @@ func (hch HandlerChainHashe) Init(jobs chan *publishEnvelope, waiters *sync.Map,
 		jobs:    jobs,
 		waiters: waiters,
 		runID:   runID,
+		parseModeEnabled: false,
 	}
+}
+
+func (hch *HandlerChainHashe) WithParseMode(enabled bool) *HandlerChainHashe {
+	hch.parseModeEnabled = enabled
+
+	return hch
 }
 
 // RunID идентификатор конкретного запуска цепочки (логи / трассировка).
@@ -109,7 +117,7 @@ func (hch *HandlerChainHashe) Emit(routingKey string, msg *tele.Message) *e.Erro
 	if msg == nil {
 		return e.NewError("message is nil", "Emit").WithSeverity(e.Warning)
 	}
-	body, err := hch.marshalOutgoing(telegram.NewOutgoingMessageRequest(msg))
+	body, err := hch.marshalOutgoing(telegram.NewOutgoingMessageRequest(msg, hch.parseModeEnabled))
 	if e.IsNonNil(err) {
 		return err
 	}
@@ -121,7 +129,7 @@ func (hch *HandlerChainHashe) EmitAlbum(routingKey string, album *telegram.Media
 	if album == nil {
 		return e.NewError("album is nil", "EmitAlbum").WithSeverity(e.Warning)
 	}
-	body, err := hch.marshalOutgoing(telegram.NewOutgoingAlbumRequest(album))
+	body, err := hch.marshalOutgoing(telegram.NewOutgoingAlbumRequest(album, hch.parseModeEnabled))
 	if e.IsNonNil(err) {
 		return err
 	}
@@ -133,7 +141,7 @@ func (hch *HandlerChainHashe) EmitWait(ctx context.Context, routingKey string, m
 	if msg == nil {
 		return nil, e.NewError("message is nil", "EmitWait").WithSeverity(e.Warning)
 	}
-	body, err := hch.marshalOutgoing(telegram.NewOutgoingMessageRequest(msg))
+	body, err := hch.marshalOutgoing(telegram.NewOutgoingMessageRequest(msg, hch.parseModeEnabled))
 	if e.IsNonNil(err) {
 		return nil, err
 	}
@@ -152,7 +160,7 @@ func (hch *HandlerChainHashe) EmitAlbumWait(ctx context.Context, routingKey stri
 	if album == nil {
 		return nil, e.NewError("album is nil", "EmitAlbumWait").WithSeverity(e.Warning)
 	}
-	body, err := hch.marshalOutgoing(telegram.NewOutgoingAlbumRequest(album))
+	body, err := hch.marshalOutgoing(telegram.NewOutgoingAlbumRequest(album, hch.parseModeEnabled))
 	if e.IsNonNil(err) {
 		return nil, err
 	}

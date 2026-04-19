@@ -2,10 +2,12 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"sync"
 	"testing"
 	"time"
 
+	e "github.com/ChatDetectiveORG/shared/errors"
 	"github.com/ChatDetectiveORG/shared/telegram"
 
 	tele "gopkg.in/telebot.v4"
@@ -23,7 +25,7 @@ func TestEmitAlbumPublishesEnvelope(t *testing.T) {
 		},
 	}
 
-	if err := hashe.EmitAlbum("telegram.message.send", album); err != nil && !err.IsNil() {
+	if err := hashe.EmitAlbum("telegram.message.send", album); e.IsNonNil(err) {
 		t.Fatalf("emit album: %v", err)
 	}
 
@@ -32,9 +34,9 @@ func TestEmitAlbumPublishesEnvelope(t *testing.T) {
 		t.Fatalf("expected routing key %q, got %q", "telegram.message.send", job.routingKey)
 	}
 
-	request, err := telegram.ParseOutgoingRequest(job.body)
-	if err != nil {
-		t.Fatalf("parse outgoing request: %v", err)
+	var request telegram.OutgoingRequest
+	if err := json.Unmarshal(job.body, &request); err != nil {
+		t.Fatalf("unmarshal outgoing request: %v", err)
 	}
 	if request.Kind != telegram.OutgoingRequestKindAlbum {
 		t.Fatalf("expected kind %q, got %q", telegram.OutgoingRequestKindAlbum, request.Kind)
@@ -82,7 +84,7 @@ func TestEmitAlbumWaitReturnsSentAlbum(t *testing.T) {
 			{Photo: &tele.Photo{}},
 		},
 	})
-	if err != nil && !err.IsNil() {
+	if e.IsNonNil(err) {
 		t.Fatalf("emit album wait: %v", err)
 	}
 	if len(got) != len(want) {
