@@ -9,9 +9,9 @@ type UsersInConact struct {
 
 	CreatedAt time.Time `pg:"created_at,default:now()"`
 
-	FirstUserID []byte
-	FirstUser *Telegramuser `pg:"rel:has-one,fk:first_user_id"`
+	BotUserID []byte
+	BotUser *Telegramuser `pg:"rel:has-one,fk:first_user_id"`
 
-	SecondUserID []byte
-	SecondUser *Telegramuser `pg:"rel:has-one,fk:second_user_id"`
+	InterlocutorUserID []byte
+	InterlocutorUser *Telegramuser `pg:"rel:has-one,fk:interlocutor_user_id"`
 }

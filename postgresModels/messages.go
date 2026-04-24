@@ -11,6 +11,7 @@ type Message struct {
 	UpdatedAt time.Time `pg:"updated_at,default:now()"`
 
 	SenderID     []byte
+	SenderIDHash string
 	ChatID       []byte
 	ChatIDHash   string
 	MessageID    int

@@ -30,6 +30,20 @@ type Telegramuser struct {
 	Metadata []byte `pg:"metadata"`
 }
 
+func (t *Telegramuser) GetFullName() (string, *e.ErrorInfo) {
+	key, err := u.DecryptUserKey(t.DataEncryptionKey)
+	if e.IsNonNil(err) {
+		return "", e.FromError(err, "failed to decrypt data encryption key").WithSeverity(e.Notice)
+	}
+
+	fullname, err := u.Decrypt(t.Fullname, key)
+	if e.IsNonNil(err) {
+		return "", e.FromError(err, "failed to decrypt telegram user fullname").WithSeverity(e.Notice)
+	}
+
+	return string(fullname), e.Nil()
+}
+
 func (t *Telegramuser) GetTgId() (int64, *e.ErrorInfo) {
 	key, err := u.DecryptUserKey(t.DataEncryptionKey)
 	if e.IsNonNil(err) {
