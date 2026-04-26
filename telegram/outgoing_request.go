@@ -7,30 +7,61 @@ import (
 type OutgoingRequestKind string
 
 const (
-	OutgoingRequestKindMessage OutgoingRequestKind = "message"
-	OutgoingRequestKindAlbum   OutgoingRequestKind = "album"
+	OutgoingRequestKindMessage  OutgoingRequestKind = "message"
+	OutgoingRequestKindAlbum    OutgoingRequestKind = "album"
+	OutgoingRequestKindEdit     OutgoingRequestKind = "edit_message"
+	OutgoingRequestKindDelete   OutgoingRequestKind = "delete_message"
+	OutgoingRequestKindCallback OutgoingRequestKind = "callback_query"
 )
 
 type OutgoingRequest struct {
-	Kind    OutgoingRequestKind `json:"kind"`
-	Message *tele.Message       `json:"message,omitempty"`
-	Album   *MediaGroup         `json:"album,omitempty"`
-	ParseModeEnabled bool       `json:"parse_mode_enabled,omitempty"`
+	Kind              OutgoingRequestKind    `json:"kind"`
+	Message           *tele.Message          `json:"message,omitempty"`
+	Album             *MediaGroup            `json:"album,omitempty"`
+	Callback          *tele.Callback         `json:"callback,omitempty"`
+	CallbackResponse  *tele.CallbackResponse `json:"callback_response,omitempty"`
+	ParseModeEnabled  bool                   `json:"parse_mode_enabled,omitempty"`
 }
 
 func NewOutgoingMessageRequest(msg *tele.Message, parseModeEnabled bool) *OutgoingRequest {
 	return &OutgoingRequest{
-		Kind:    OutgoingRequestKindMessage,
-		Message: msg,
+		Kind:             OutgoingRequestKindMessage,
+		Message:          msg,
+		ParseModeEnabled: parseModeEnabled,
+	}
+}
+
+func NewOutgoingEditMessageRequest(msg *tele.Message, parseModeEnabled bool) *OutgoingRequest {
+	return &OutgoingRequest{
+		Kind:             OutgoingRequestKindEdit,
+		Message:          msg,
+		ParseModeEnabled: parseModeEnabled,
+	}
+}
+
+func NewOutgoingDeleteMessageRequest(msg *tele.Message, parseModeEnabled bool) *OutgoingRequest {
+	return &OutgoingRequest{
+		Kind:             OutgoingRequestKindDelete,
+		Message:          msg,
 		ParseModeEnabled: parseModeEnabled,
 	}
 }
 
 func NewOutgoingAlbumRequest(album *MediaGroup, parseModeEnabled bool) *OutgoingRequest {
 	return &OutgoingRequest{
-		Kind:  OutgoingRequestKindAlbum,
-		Album: album,
+		Kind:             OutgoingRequestKindAlbum,
+		Album:            album,
 		ParseModeEnabled: parseModeEnabled,
+	}
+}
+
+// NewOutgoingCallbackRequest enqueues answerCallbackQuery (alerts, optional URL, etc.).
+func NewOutgoingCallbackRequest(cb *tele.Callback, resp *tele.CallbackResponse) *OutgoingRequest {
+	return &OutgoingRequest{
+		Kind:              OutgoingRequestKindCallback,
+		Callback:          cb,
+		CallbackResponse:  resp,
+		ParseModeEnabled:  false,
 	}
 }
 

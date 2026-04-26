@@ -77,6 +77,47 @@ func (t *Telegramuser) GetByTelegramID(db orm.DB, userID int64) *e.ErrorInfo {
 	return e.Nil()
 }
 
+// UpdateUserData re-encrypts and persists the user's fullname, username, and metadata.
+// Call this after GetByTelegramID to refresh stale profile data.
+func (t *Telegramuser) UpdateUserData(db orm.DB, tguser *tele.User) *e.ErrorInfo {
+	key, err := u.DecryptUserKey(t.DataEncryptionKey)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to decrypt user key for update").WithSeverity(e.Notice)
+	}
+
+	encryptedFullname, err := u.Encrypt([]byte(tguser.FirstName+" "+tguser.LastName), key)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to encrypt fullname on update").WithSeverity(e.Notice)
+	}
+
+	encryptedUsername, err := u.Encrypt([]byte(tguser.Username), key)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to encrypt username on update").WithSeverity(e.Notice)
+	}
+
+	jsonMetadata, eraw := json.Marshal(tguser)
+	if eraw != nil {
+		return e.FromError(eraw, "failed to marshal user metadata on update").WithSeverity(e.Notice)
+	}
+
+	encryptedMetadata, err := u.Encrypt(jsonMetadata, key)
+	if e.IsNonNil(err) {
+		return e.FromError(err, "failed to encrypt metadata on update").WithSeverity(e.Notice)
+	}
+
+	t.Fullname = encryptedFullname
+	t.Username = encryptedUsername
+	t.Metadata = encryptedMetadata
+	t.UpdatedAt = time.Now()
+
+	_, eraw = db.Model(t).WherePK().Column("fullname", "username", "metadata", "updated_at").Update()
+	if eraw != nil {
+		return e.FromError(eraw, "failed to update telegram user data").WithSeverity(e.Notice)
+	}
+
+	return e.Nil()
+}
+
 func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) *e.ErrorInfo {
 	err := t.GetByTelegramID(tx, tguser.ID)
 	if e.IsNil(err) {

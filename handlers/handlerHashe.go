@@ -16,19 +16,19 @@ import (
 
 // HandlerChainHashe — контекст одного прогона цепочки: отправка в exchange и произвольные аргументы между шагами.
 type HandlerChainHashe struct {
-	args    map[string]any
-	jobs    chan *publishEnvelope
-	waiters *sync.Map
-	runID   string
+	args             map[string]any
+	jobs             chan *publishEnvelope
+	waiters          *sync.Map
+	runID            string
 	parseModeEnabled bool
 }
 
 func (hch HandlerChainHashe) Init(jobs chan *publishEnvelope, waiters *sync.Map, runID string) *HandlerChainHashe {
 	return &HandlerChainHashe{
-		args:    make(map[string]any),
-		jobs:    jobs,
-		waiters: waiters,
-		runID:   runID,
+		args:             make(map[string]any),
+		jobs:             jobs,
+		waiters:          waiters,
+		runID:            runID,
 		parseModeEnabled: false,
 	}
 }
@@ -153,6 +153,106 @@ func (hch *HandlerChainHashe) EmitWait(ctx context.Context, routingKey string, m
 		return nil, waitErr
 	}
 	return sr.SentMessage, e.Nil()
+}
+
+// EmitEditMessage публикует запрос на редактирование сообщения.
+func (hch *HandlerChainHashe) EmitEditMessage(routingKey string, msg *tele.Message) *e.ErrorInfo {
+	if msg == nil {
+		return e.NewError("message is nil", "EmitEditMessage").WithSeverity(e.Warning)
+	}
+	body, err := hch.marshalOutgoing(telegram.NewOutgoingEditMessageRequest(msg, hch.parseModeEnabled))
+	if e.IsNonNil(err) {
+		return err
+	}
+	return hch.enqueue(routingKey, body, uuid.New().String(), "handlers.emit_edit_message")
+}
+
+// EmitEditMessageWait ждёт SendResult от message-sender для отредактированного сообщения.
+func (hch *HandlerChainHashe) EmitEditMessageWait(ctx context.Context, routingKey string, msg *tele.Message) (*tele.Message, *e.ErrorInfo) {
+	if msg == nil {
+		return nil, e.NewError("message is nil", "EmitEditMessageWait").WithSeverity(e.Warning)
+	}
+	body, err := hch.marshalOutgoing(telegram.NewOutgoingEditMessageRequest(msg, hch.parseModeEnabled))
+	if e.IsNonNil(err) {
+		return nil, err
+	}
+	sr, waitErr := hch.waitResult(ctx, routingKey, body, "handlers.emit_edit_message_wait")
+	if e.IsNonNil(waitErr) {
+		if sr != nil {
+			return sr.SentMessage, waitErr
+		}
+		return nil, waitErr
+	}
+	return sr.SentMessage, e.Nil()
+}
+
+// EmitDeleteMessage публикует запрос на удаление сообщения.
+func (hch *HandlerChainHashe) EmitDeleteMessage(routingKey string, msg *tele.Message) *e.ErrorInfo {
+	if msg == nil {
+		return e.NewError("message is nil", "EmitDeleteMessage").WithSeverity(e.Warning)
+	}
+	body, err := hch.marshalOutgoing(telegram.NewOutgoingDeleteMessageRequest(msg, hch.parseModeEnabled))
+	if e.IsNonNil(err) {
+		return err
+	}
+	return hch.enqueue(routingKey, body, uuid.New().String(), "handlers.emit_delete_message")
+}
+
+// EmitCallback публикует answerCallbackQuery.
+func (hch *HandlerChainHashe) EmitCallback(routingKey string, callback *tele.Callback, resp *tele.CallbackResponse) *e.ErrorInfo {
+	if callback == nil {
+		return e.NewError("callback is nil", "EmitCallback").WithSeverity(e.Warning)
+	}
+	body, err := hch.marshalOutgoing(telegram.NewOutgoingCallbackRequest(callback, resp))
+	if e.IsNonNil(err) {
+		return err
+	}
+	return hch.enqueue(routingKey, body, uuid.New().String(), "handlers.emit_callback")
+}
+
+// EmitDeleteMessageWait ждёт подтверждения удаления от message-sender.
+func (hch *HandlerChainHashe) EmitDeleteMessageWait(ctx context.Context, routingKey string, msg *tele.Message) (*tele.Message, *e.ErrorInfo) {
+	if msg == nil {
+		return nil, e.NewError("message is nil", "EmitDeleteMessageWait").WithSeverity(e.Warning)
+	}
+	body, err := hch.marshalOutgoing(telegram.NewOutgoingDeleteMessageRequest(msg, hch.parseModeEnabled))
+	if e.IsNonNil(err) {
+		return nil, err
+	}
+	sr, waitErr := hch.waitResult(ctx, routingKey, body, "handlers.emit_delete_message_wait")
+	if e.IsNonNil(waitErr) {
+		if sr != nil {
+			return sr.SentMessage, waitErr
+		}
+		return nil, waitErr
+	}
+	return sr.SentMessage, e.Nil()
+}
+
+// EmitMessageUserAnswer отправляет ответ в чат исходного пользовательского сообщения
+// и возвращает это пользовательское сообщение после подтверждения отправки.
+func (hch *HandlerChainHashe) EmitMessageUserAnswer(ctx context.Context, routingKey string, msg *tele.Message) (*tele.Message, *e.ErrorInfo) {
+	if msg == nil {
+		return nil, e.NewError("message is nil", "EmitMessageUserAnswer").WithSeverity(e.Warning)
+	}
+	if msg.ReplyTo == nil {
+		return nil, e.NewError("reply message is nil", "EmitMessageUserAnswer").WithSeverity(e.Warning)
+	}
+	if msg.ReplyTo.Chat == nil || msg.ReplyTo.Chat.ID == 0 {
+		return nil, e.NewError("reply chat is empty", "EmitMessageUserAnswer").WithSeverity(e.Warning)
+	}
+	if msg.Chat == nil {
+		msg.Chat = msg.ReplyTo.Chat
+	} else if msg.Chat.ID == 0 {
+		msg.Chat.ID = msg.ReplyTo.Chat.ID
+	}
+
+	_, err := hch.EmitWait(ctx, routingKey, msg)
+	if e.IsNonNil(err) {
+		return msg.ReplyTo, err
+	}
+
+	return msg.ReplyTo, e.Nil()
 }
 
 // EmitAlbumWait ждёт SendResult от message-sender для отправленного альбома.

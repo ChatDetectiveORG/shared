@@ -6,6 +6,38 @@ import (
 	tele "gopkg.in/telebot.v4"
 )
 
+type businessConnectionFilter struct{}
+
+func (b *businessConnectionFilter) Filter(update tele.Update) bool {
+	return update.BusinessConnection != nil
+}
+
+// BusinessConnectionChanged matches updates where a user connects or disconnects the bot
+// from their Telegram Business account.
+func BusinessConnectionChanged() UpdateFilter {
+	return &businessConnectionFilter{}
+}
+
+type uniqueCallbackFilter struct {
+	unique string
+}
+
+// Filter matches callback queries whose Data equals the unique name or starts with "unique\n".
+// This allows passing optional extra data after a newline separator.
+func (u *uniqueCallbackFilter) Filter(update tele.Update) bool {
+	if update.Callback == nil || update.Callback.Data == "" {
+		return false
+	}
+	data := update.Callback.Data
+	return data == u.unique || strings.HasPrefix(data, u.unique+"\n")
+}
+
+// UniqueCallback matches callback queries routed to the given unique name.
+// Callback data format: "unique_name" or "unique_name\nredis_key".
+func UniqueCallback(unique string) UpdateFilter {
+	return &uniqueCallbackFilter{unique: unique}
+}
+
 // UpdateFilter ограничивает обработку endpoint-ом только подходящими апдейтами.
 type UpdateFilter interface {
 	Filter(update tele.Update) bool
@@ -88,8 +120,8 @@ func CallbackQueryJSON(matchCallbackDataArg string, matchCallbackDataKey string)
 type busEventType string
 
 const (
-	BusEventTypeNew    busEventType = "new"
-	BusEventTypeEdited busEventType = "edited"
+	BusEventTypeNew     busEventType = "new"
+	BusEventTypeEdited  busEventType = "edited"
 	BusEventTypeDeleted busEventType = "deleted"
 )
 
