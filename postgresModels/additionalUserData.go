@@ -1,5 +1,7 @@
 package postgresmodels
 
+import "time"
+
 const (
 	ReferralBonusMoney    = "money"
 	ReferralBonusDiscount = "discount"
@@ -19,11 +21,17 @@ type UserSettings struct {
 }
 
 type UserLevels struct {
-	ID             int
-	LinkedUserID   []byte
-	LinkedUser     *Telegramuser `pg:"rel:has-one,fk:linked_user_id"`
-	Level          int
-	UntilTimestamp int64
+	ID int `pg:"id,pk"`
+
+	LinkedUserID []byte        `pg:"linked_user_id,fk:telegram_user_id"`
+	LinkedUser   *Telegramuser `pg:"rel:has-one,fk:linked_user_id"`
+
+	CreatedAt time.Time `pg:"created_at,default:now()"`
+	UpdatedAt time.Time `pg:"updated_at,default:now()"`
+
+	Level           int   `pg:"level"`
+	UntilTimestamp  int64 `pg:"until_timestamp"`
+	SourcePaymentID *int  `pg:"source_payment_id,unique"`
 }
 
 type Admin struct {
