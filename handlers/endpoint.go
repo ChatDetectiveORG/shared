@@ -15,9 +15,9 @@ type Endpoint struct {
 	HandlerChain HandlerChain
 	Filter       UpdateFilter
 
-	jobs              chan *publishEnvelope
-	rabbitmqChannel   *amqp.Channel
-	outExchange       string
+	jobs            chan *publishEnvelope
+	rabbitmqChannel *amqp.Channel
+	outExchange     string
 }
 
 // Init задаёт имя, цепочку и фильтр. Исходящий AMQP подключается через Router.StartOutgoing.
@@ -28,9 +28,9 @@ func (ep *Endpoint) Init(name string, chain HandlerChain, f UpdateFilter) *Endpo
 	return ep
 }
 
-func (ep *Endpoint) runChain(update tele.Update, router *Router, wg *sync.WaitGroup) *e.ErrorInfo {
+func (ep *Endpoint) runChain(update tele.Update, router *Router, wg *sync.WaitGroup, mirrorID string) *e.ErrorInfo {
 	if ep.Filter != nil && !ep.Filter.Filter(update) {
 		return e.Nil()
 	}
-	return ep.HandlerChain.WithWaitGroup(wg).Run(update, ep.jobs, router.sendWaiters)
+	return ep.HandlerChain.WithWaitGroup(wg).Run(update, ep.jobs, router.sendWaiters, mirrorID)
 }

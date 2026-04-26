@@ -15,12 +15,13 @@ const (
 )
 
 type OutgoingRequest struct {
-	Kind              OutgoingRequestKind    `json:"kind"`
-	Message           *tele.Message          `json:"message,omitempty"`
-	Album             *MediaGroup            `json:"album,omitempty"`
-	Callback          *tele.Callback         `json:"callback,omitempty"`
-	CallbackResponse  *tele.CallbackResponse `json:"callback_response,omitempty"`
-	ParseModeEnabled  bool                   `json:"parse_mode_enabled,omitempty"`
+	Kind             OutgoingRequestKind    `json:"kind"`
+	MirrorID         string                 `json:"mirror_id,omitempty"`
+	Message          *tele.Message          `json:"message,omitempty"`
+	Album            *MediaGroup            `json:"album,omitempty"`
+	Callback         *tele.Callback         `json:"callback,omitempty"`
+	CallbackResponse *tele.CallbackResponse `json:"callback_response,omitempty"`
+	ParseModeEnabled bool                   `json:"parse_mode_enabled,omitempty"`
 }
 
 func NewOutgoingMessageRequest(msg *tele.Message, parseModeEnabled bool) *OutgoingRequest {
@@ -58,10 +59,10 @@ func NewOutgoingAlbumRequest(album *MediaGroup, parseModeEnabled bool) *Outgoing
 // NewOutgoingCallbackRequest enqueues answerCallbackQuery (alerts, optional URL, etc.).
 func NewOutgoingCallbackRequest(cb *tele.Callback, resp *tele.CallbackResponse) *OutgoingRequest {
 	return &OutgoingRequest{
-		Kind:              OutgoingRequestKindCallback,
-		Callback:          cb,
-		CallbackResponse:  resp,
-		ParseModeEnabled:  false,
+		Kind:             OutgoingRequestKindCallback,
+		Callback:         cb,
+		CallbackResponse: resp,
+		ParseModeEnabled: false,
 	}
 }
 

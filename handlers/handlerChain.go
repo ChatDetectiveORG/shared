@@ -75,12 +75,12 @@ func (hc *HandlerChain) WithWaitGroup(wg *sync.WaitGroup) *HandlerChain {
 	return hc
 }
 
-func (hc *HandlerChain) Run(u tele.Update, jobs chan *publishEnvelope, waiters *sync.Map) *e.ErrorInfo {
+func (hc *HandlerChain) Run(u tele.Update, jobs chan *publishEnvelope, waiters *sync.Map, mirrorID string) *e.ErrorInfo {
 	ctx, cancel := context.WithTimeout(context.Background(), hc.timeout)
 	defer cancel()
 
 	runID := uuid.New().String()
-	hc.Hashe = HandlerChainHashe{}.Init(jobs, waiters, runID)
+	hc.Hashe = HandlerChainHashe{}.Init(jobs, waiters, runID, mirrorID)
 
 	done := make(chan *e.ErrorInfo, 1)
 

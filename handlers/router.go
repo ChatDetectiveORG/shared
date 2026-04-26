@@ -28,7 +28,7 @@ type Router struct {
 	wg       *sync.WaitGroup
 	ctx      context.Context
 	mu       sync.Mutex
-	replicas map[string]chan tele.Update
+	replicas map[string]chan updateEnvelope
 
 	outgoingMu          sync.Mutex
 	outgoingStarted     bool
@@ -36,6 +36,11 @@ type Router struct {
 	sendWaiters         *sync.Map
 	outgoingExchange    string
 	sendResultExchange  string
+}
+
+type updateEnvelope struct {
+	update   tele.Update
+	mirrorID string
 }
 
 func (r *Router) shardRoutingKey(sessionID string) string {
@@ -52,6 +57,7 @@ func (r *Router) HandleUpdate(delivery amqp.Delivery) *e.ErrorInfo {
 		return e.NewError("missing session_id header", "HandleUpdate").WithSeverity(e.Critical)
 	}
 	shard := r.shardRoutingKey(sid)
+	mirrorID, _ := delivery.Headers["mirror_id"].(string)
 
 	var update tele.Update
 	if err := json.Unmarshal(delivery.Body, &update); err != nil {
@@ -64,7 +70,7 @@ func (r *Router) HandleUpdate(delivery amqp.Delivery) *e.ErrorInfo {
 	}
 
 	select {
-	case ch <- update:
+	case ch <- updateEnvelope{update: update, mirrorID: mirrorID}:
 	default:
 		return e.NewError("shard channel full", shard).WithSeverity(e.Critical)
 	}
@@ -81,7 +87,7 @@ func (r *Router) InitSharding(podID string, wg *sync.WaitGroup, ctx context.Cont
 	if r.ReplicaCount <= 0 {
 		return
 	}
-	r.replicas = make(map[string]chan tele.Update, r.ReplicaCount)
+	r.replicas = make(map[string]chan updateEnvelope, r.ReplicaCount)
 	for i := 0; i < r.ReplicaCount; i++ {
 		key := fmt.Sprintf("endpoint-%02d", i)
 		r.replicas[key] = r.listenShard()
@@ -89,8 +95,8 @@ func (r *Router) InitSharding(podID string, wg *sync.WaitGroup, ctx context.Cont
 	}
 }
 
-func (r *Router) listenShard() chan tele.Update {
-	updates := make(chan tele.Update, 1000)
+func (r *Router) listenShard() chan updateEnvelope {
+	updates := make(chan updateEnvelope, 1000)
 	if r.wg == nil {
 		return updates
 	}
@@ -100,7 +106,7 @@ func (r *Router) listenShard() chan tele.Update {
 		defer r.wg.Done()
 		if ctx == nil {
 			for u := range updates {
-				r.Dispatch(u)
+				r.Dispatch(u.update, u.mirrorID)
 			}
 			return
 		}
@@ -110,7 +116,7 @@ func (r *Router) listenShard() chan tele.Update {
 				if !ok {
 					return
 				}
-				r.Dispatch(u)
+				r.Dispatch(u.update, u.mirrorID)
 			case <-ctx.Done():
 				return
 			}
@@ -120,7 +126,7 @@ func (r *Router) listenShard() chan tele.Update {
 }
 
 // Dispatch прогоняет update через все endpoint-ы с подходящим фильтром.
-func (r *Router) Dispatch(update tele.Update) {
+func (r *Router) Dispatch(update tele.Update, mirrorID string) {
 	var wg *sync.WaitGroup
 	r.mu.Lock()
 	wg = r.wg
@@ -128,7 +134,7 @@ func (r *Router) Dispatch(update tele.Update) {
 
 	for i := range r.Endpoints {
 		ep := &r.Endpoints[i]
-		if err := ep.runChain(update, r, wg); r.ErrorChannel != nil && err != nil && !err.IsNil() && err.Severity != e.Ingnored {
+		if err := ep.runChain(update, r, wg, mirrorID); r.ErrorChannel != nil && err != nil && !err.IsNil() && err.Severity != e.Ingnored {
 			r.ErrorChannel <- err.PushStack()
 		}
 	}

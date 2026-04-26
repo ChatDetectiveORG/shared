@@ -10,7 +10,7 @@ import (
 
 // Makes a hash from any integer or string
 func ToHash(id interface{}) string {
-	data := []byte(fmt.Sprintf("%d", id))
+	data := []byte(fmt.Sprintf("%v", id))
 
 	hash := sha256.Sum256(data)
 
@@ -23,5 +23,5 @@ func ToSecureHash(id interface{}) (string, *e.ErrorInfo) {
 		return "", e.FromError(err, "failed to get master key")
 	}
 
-	return ToHash(string(masterKey) + "|" + fmt.Sprintf("%d", id)), e.Nil()
+	return ToHash(string(masterKey) + "|" + fmt.Sprintf("%v", id)), e.Nil()
 }

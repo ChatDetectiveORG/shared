@@ -95,6 +95,16 @@ func TextCommand(matchString string) UpdateFilter {
 	}
 }
 
+type textFilter struct{}
+
+func (t *textFilter) Filter(update tele.Update) bool {
+	return update.Message != nil && update.Message.Text != ""
+}
+
+func Text() UpdateFilter {
+	return &textFilter{}
+}
+
 type callbackQueryJSON struct {
 	matchCallbackDataArg string
 	matchCallbackDataKey string

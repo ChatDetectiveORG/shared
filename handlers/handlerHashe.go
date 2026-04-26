@@ -20,15 +20,21 @@ type HandlerChainHashe struct {
 	jobs             chan *publishEnvelope
 	waiters          *sync.Map
 	runID            string
+	mirrorID         string
 	parseModeEnabled bool
 }
 
-func (hch HandlerChainHashe) Init(jobs chan *publishEnvelope, waiters *sync.Map, runID string) *HandlerChainHashe {
+func (hch HandlerChainHashe) Init(jobs chan *publishEnvelope, waiters *sync.Map, runID string, mirrorID ...string) *HandlerChainHashe {
+	resolvedMirrorID := ""
+	if len(mirrorID) > 0 {
+		resolvedMirrorID = mirrorID[0]
+	}
 	return &HandlerChainHashe{
 		args:             make(map[string]any),
 		jobs:             jobs,
 		waiters:          waiters,
 		runID:            runID,
+		mirrorID:         resolvedMirrorID,
 		parseModeEnabled: false,
 	}
 }
@@ -44,7 +50,14 @@ func (hch *HandlerChainHashe) RunID() string {
 	return hch.runID
 }
 
+func (hch *HandlerChainHashe) MirrorID() string {
+	return hch.mirrorID
+}
+
 func (hch *HandlerChainHashe) marshalOutgoing(request *telegram.OutgoingRequest) ([]byte, *e.ErrorInfo) {
+	if request != nil && request.MirrorID == "" {
+		request.MirrorID = hch.mirrorID
+	}
 	body, err := json.Marshal(request)
 	if err != nil {
 		return nil, e.FromError(err, "marshal outgoing request").WithSeverity(e.Critical)
