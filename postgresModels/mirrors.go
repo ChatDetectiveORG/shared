@@ -40,7 +40,7 @@ type Mirror struct {
 	UpdatedAt time.Time `pg:"updated_at,default:now()"`
 }
 
-func NewMirror(owner *Telegramuser, token string, botID int64, botUsername string, unique string, status string, now time.Time) (*Mirror, *e.ErrorInfo) {
+func NewMirror(db orm.DB, owner *Telegramuser, token string, botID int64, botUsername string, unique string, status string, now time.Time) (*Mirror, *e.ErrorInfo) {
 	if owner == nil {
 		return nil, e.NewError("owner is nil", "failed to build mirror").WithSeverity(e.Notice)
 	}
@@ -55,8 +55,8 @@ func NewMirror(owner *Telegramuser, token string, botID int64, botUsername strin
 	if status == "" {
 		status = MirrorStatusPending
 	}
-	return &Mirror{
-		Unique:      unique,
+	mirror := &Mirror{
+		Unique:        unique,
 		Status:      status,
 		Token:       encryptedToken,
 		TokenHash:   tokenHash,
@@ -66,7 +66,14 @@ func NewMirror(owner *Telegramuser, token string, botID int64, botUsername strin
 		Owner:       owner,
 		CreatedAt:   now,
 		UpdatedAt:   now,
-	}, e.Nil()
+	}
+
+	_, rawErr := db.Model(mirror).Insert()
+	if rawErr != nil {
+		return nil, e.FromError(rawErr, "failed to create mirror").WithSeverity(e.Notice)
+	}
+
+	return mirror, e.Nil()
 }
 
 func (m *Mirror) DecryptToken(owner *Telegramuser) (string, *e.ErrorInfo) {
@@ -145,6 +152,18 @@ func CountActiveMirrorsForOwner(db orm.DB, ownerID []byte, now time.Time) (int, 
 		return 0, e.FromError(err, "failed to count owner mirrors").WithSeverity(e.Notice)
 	}
 	return count, e.Nil()
+}
+
+func GetAllMirrorsForOwner(db orm.DB, ownerID []byte) ([]*Mirror, *e.ErrorInfo) {
+	var mirrors []*Mirror
+
+	err := db.Model(&mirrors).
+		Where("owner_id = ?", ownerID).
+		Select()
+	if err != nil {
+		return mirrors, e.FromError(err, "failed to count owner mirrors").WithSeverity(e.Notice)
+	}
+	return mirrors, e.Nil()
 }
 
 func MarkMirrorUsed(db orm.DB, mirrorID int, now time.Time) *e.ErrorInfo {

@@ -29,7 +29,7 @@ func (u *uniqueCallbackFilter) Filter(update tele.Update) bool {
 		return false
 	}
 	data := update.Callback.Data
-	return data == u.unique || strings.HasPrefix(data, u.unique+"\n")
+	return data == u.unique || strings.HasPrefix(data, u.unique)
 }
 
 // UniqueCallback matches callback queries routed to the given unique name.

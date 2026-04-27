@@ -31,6 +31,10 @@ type CodeLocation struct {
 	Function string `json:"function"`
 }
 
+func Wrap(err error) *ErrorInfo {
+	return FromError(err, "")
+}
+
 func FromError(err error, msg string) *ErrorInfo {
 	return &ErrorInfo{
 		Message:       msg,

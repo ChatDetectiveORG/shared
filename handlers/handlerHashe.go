@@ -242,32 +242,6 @@ func (hch *HandlerChainHashe) EmitDeleteMessageWait(ctx context.Context, routing
 	return sr.SentMessage, e.Nil()
 }
 
-// EmitMessageUserAnswer отправляет ответ в чат исходного пользовательского сообщения
-// и возвращает это пользовательское сообщение после подтверждения отправки.
-func (hch *HandlerChainHashe) EmitMessageUserAnswer(ctx context.Context, routingKey string, msg *tele.Message) (*tele.Message, *e.ErrorInfo) {
-	if msg == nil {
-		return nil, e.NewError("message is nil", "EmitMessageUserAnswer").WithSeverity(e.Warning)
-	}
-	if msg.ReplyTo == nil {
-		return nil, e.NewError("reply message is nil", "EmitMessageUserAnswer").WithSeverity(e.Warning)
-	}
-	if msg.ReplyTo.Chat == nil || msg.ReplyTo.Chat.ID == 0 {
-		return nil, e.NewError("reply chat is empty", "EmitMessageUserAnswer").WithSeverity(e.Warning)
-	}
-	if msg.Chat == nil {
-		msg.Chat = msg.ReplyTo.Chat
-	} else if msg.Chat.ID == 0 {
-		msg.Chat.ID = msg.ReplyTo.Chat.ID
-	}
-
-	_, err := hch.EmitWait(ctx, routingKey, msg)
-	if e.IsNonNil(err) {
-		return msg.ReplyTo, err
-	}
-
-	return msg.ReplyTo, e.Nil()
-}
-
 // EmitAlbumWait ждёт SendResult от message-sender для отправленного альбома.
 func (hch *HandlerChainHashe) EmitAlbumWait(ctx context.Context, routingKey string, album *telegram.MediaGroup) ([]*tele.Message, *e.ErrorInfo) {
 	if album == nil {
