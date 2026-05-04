@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"strconv"
+	"strings"
 	"time"
 
 	u "github.com/ChatDetectiveORG/shared/utils"
@@ -28,6 +29,9 @@ type Telegramuser struct {
 	Username []byte
 
 	Metadata []byte `pg:"metadata"`
+
+	ReferralCode string `pg:"referral_code,unique,type:varchar(8),notnull"`
+	Settings *UserSettings `pg:"rel:has-one,fk:linked_user_id"`
 }
 
 func (t *Telegramuser) GetFullName() (string, *e.ErrorInfo) {
@@ -174,6 +178,11 @@ func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) *e.ErrorInfo {
 		return e.FromError(err, "failed to get secure hash").WithSeverity(e.Critical)
 	}
 
+	referralCode, eRaw := u.GenerateReferralCode(8)
+	if e.IsNonNil(eRaw) {
+		return e.FromError(eRaw, "failed to generate referral code").WithSeverity(e.Critical)
+	}
+
 	user := &Telegramuser{
 		ID:                encryptedID,
 		IDHash:            idHash,
@@ -181,6 +190,7 @@ func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) *e.ErrorInfo {
 		Username:          encryptedUsername,
 		Metadata:          encryptedMetadata,
 		DataEncryptionKey: encryptedKey,
+		ReferralCode:      referralCode,
 	}
 
 	settings := &UserSettings{
@@ -188,12 +198,25 @@ func (t *Telegramuser) GetOrCreate(tx *pg.Tx, tguser *tele.User) *e.ErrorInfo {
 		LinkedUser:   user,
 	}
 
-	_, errUnwrapped := tx.Model(user).Insert()
-	if e.IsNonNil(errUnwrapped) {
-		return e.FromError(errUnwrapped, "error creating telegram user")
+	for {
+		_, errUnwrapped := tx.Model(user).Insert()
+		if e.IsNonNil(errUnwrapped) && !strings.Contains(errUnwrapped.Error(), "duplicate key value violates unique constraint") {
+			return e.FromError(errUnwrapped, "error creating telegram user")
+		}
+
+		if e.IsNil(errUnwrapped) {
+			break
+		}
+
+		referralCode, eRaw = u.GenerateReferralCode(8)
+		if e.IsNonNil(eRaw) {
+			return e.FromError(eRaw, "failed to generate referral code").WithSeverity(e.Critical)
+		}
+
+		user.ReferralCode = referralCode
 	}
 
-	_, errUnwrapped = tx.Model(settings).
+	_, errUnwrapped := tx.Model(settings).
 		OnConflict("(linked_user_id) DO NOTHING").
 		Insert()
 	if e.IsNonNil(errUnwrapped) {

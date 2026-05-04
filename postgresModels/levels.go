@@ -7,6 +7,23 @@ import (
 	"github.com/go-pg/pg/v10/orm"
 )
 
+type UserLevels struct {
+	ID int `pg:"id,pk"`
+
+	LinkedUserID []byte        `pg:"linked_user_id,fk:telegram_user_id"`
+	LinkedUser   *Telegramuser `pg:"rel:has-one,fk:linked_user_id"`
+
+	CreatedAt time.Time `pg:"created_at,default:now()"`
+	UpdatedAt time.Time `pg:"updated_at,default:now()"`
+
+	Level           int   `pg:"level"`
+	UntilTimestamp  int64 `pg:"until_timestamp"`
+	SourcePaymentID *int  `pg:"source_payment_id,unique"`
+
+	IsReferralBonus bool `pg:"is_referral_bonus,default:false"`
+	LinkedReferralIDs []int `pg:"linked_referral_ids,array"`
+}
+
 type LevelSummary struct {
 	Level                 int
 	NearestDecreaseAt     int64
