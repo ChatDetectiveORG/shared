@@ -199,6 +199,30 @@ func (hch *HandlerChainHashe) EmitEditMessageWait(ctx context.Context, routingKe
 	return sr.SentMessage, e.Nil()
 }
 
+// EmitPinMessage публикует запрос на закрепление сообщения.
+func (hch *HandlerChainHashe) EmitPinMessage(routingKey string, msg *tele.Message, silent bool) *e.ErrorInfo {
+	if msg == nil {
+		return e.NewError("message is nil", "EmitPinMessage").WithSeverity(e.Warning)
+	}
+	body, err := hch.marshalOutgoing(telegram.NewOutgoingPinRequest(msg, silent))
+	if e.IsNonNil(err) {
+		return err
+	}
+	return hch.enqueue(routingKey, body, uuid.New().String(), "handlers.emit_pin_message")
+}
+
+// EmitUnpinMessage публикует запрос на снятие закрепления сообщения.
+func (hch *HandlerChainHashe) EmitUnpinMessage(routingKey string, msg *tele.Message) *e.ErrorInfo {
+	if msg == nil {
+		return e.NewError("message is nil", "EmitUnpinMessage").WithSeverity(e.Warning)
+	}
+	body, err := hch.marshalOutgoing(telegram.NewOutgoingUnpinRequest(msg))
+	if e.IsNonNil(err) {
+		return err
+	}
+	return hch.enqueue(routingKey, body, uuid.New().String(), "handlers.emit_unpin_message")
+}
+
 // EmitDeleteMessage публикует запрос на удаление сообщения.
 func (hch *HandlerChainHashe) EmitDeleteMessage(routingKey string, msg *tele.Message) *e.ErrorInfo {
 	if msg == nil {

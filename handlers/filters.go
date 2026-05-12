@@ -43,6 +43,21 @@ type UpdateFilter interface {
 	Filter(update tele.Update) bool
 }
 
+type callbackStartsWithFilter struct {
+	prefix string
+}
+
+func (c *callbackStartsWithFilter) Filter(update tele.Update) bool {
+	if update.Callback == nil || update.Callback.Data == "" {
+		return false
+	}
+	return strings.HasPrefix(update.Callback.Data, c.prefix)
+}
+
+func CallbackStartsWith(prefix string) UpdateFilter {
+	return &callbackStartsWithFilter{prefix: prefix}
+}
+
 type commandFilter struct {
 	commands []string
 }

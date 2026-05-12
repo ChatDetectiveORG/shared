@@ -12,6 +12,8 @@ const (
 	OutgoingRequestKindEdit     OutgoingRequestKind = "edit_message"
 	OutgoingRequestKindDelete   OutgoingRequestKind = "delete_message"
 	OutgoingRequestKindCallback OutgoingRequestKind = "callback_query"
+	OutgoingRequestKindPin      OutgoingRequestKind = "pin_message"
+	OutgoingRequestKindUnpin    OutgoingRequestKind = "unpin_message"
 )
 
 type OutgoingRequest struct {
@@ -22,6 +24,13 @@ type OutgoingRequest struct {
 	Callback         *tele.Callback         `json:"callback,omitempty"`
 	CallbackResponse *tele.CallbackResponse `json:"callback_response,omitempty"`
 	ParseModeEnabled bool                   `json:"parse_mode_enabled,omitempty"`
+
+	// Priority hints how aggressively the request should compete for shared rate-limit tokens.
+	// Lower numbers = higher priority. Zero defaults to "interactive bot reply" priority on consumer side.
+	Priority int `json:"priority,omitempty"`
+
+	// PinSilent toggles silent pinning (no notification). Only used for the pin_message kind.
+	PinSilent bool `json:"pin_silent,omitempty"`
 }
 
 func NewOutgoingMessageRequest(msg *tele.Message, parseModeEnabled bool) *OutgoingRequest {
@@ -63,6 +72,24 @@ func NewOutgoingCallbackRequest(cb *tele.Callback, resp *tele.CallbackResponse) 
 		Callback:         cb,
 		CallbackResponse: resp,
 		ParseModeEnabled: false,
+	}
+}
+
+// NewOutgoingPinRequest pins the supplied message in its chat. The message must already exist and
+// carry both Chat.ID and ID; callers usually pass the result of EmitWait/EmitEditMessageWait.
+func NewOutgoingPinRequest(msg *tele.Message, silent bool) *OutgoingRequest {
+	return &OutgoingRequest{
+		Kind:      OutgoingRequestKindPin,
+		Message:   msg,
+		PinSilent: silent,
+	}
+}
+
+// NewOutgoingUnpinRequest unpins the supplied message; the message itself stays in the chat.
+func NewOutgoingUnpinRequest(msg *tele.Message) *OutgoingRequest {
+	return &OutgoingRequest{
+		Kind:    OutgoingRequestKindUnpin,
+		Message: msg,
 	}
 }
 
