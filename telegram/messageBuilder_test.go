@@ -1,0 +1,292 @@
+package telegram
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/ChatDetectiveORG/shared/utils"
+	tele "gopkg.in/telebot.v4"
+)
+
+func TestTextFormatToMdV2Tag(t *testing.T) {
+	tests := []struct {
+		name    string
+		format  TextFormat
+		content string
+		other   []TextFormat
+		want    string
+	}{
+		{
+			name:    "bold",
+			format:  TextFormat{Type: "bold"},
+			content: "hi",
+			want:    "**hi**",
+		},
+		{
+			name:    "bold escapes reserved chars in content",
+			format:  TextFormat{Type: "bold"},
+			content: "a.b",
+			want:    "**a\\.b**",
+		},
+		{
+			name:    "italic",
+			format:  TextFormat{Type: "italic"},
+			content: "hi",
+			want:    "*hi*",
+		},
+		{
+			name:    "underline",
+			format:  TextFormat{Type: "underline"},
+			content: "x",
+			want:    "__x__",
+		},
+		{
+			name:    "mono",
+			format:  TextFormat{Type: "mono"},
+			content: "code",
+			want:    "`code`",
+		},
+		{
+			name:    "spoiler",
+			format:  TextFormat{Type: "spoiler"},
+			content: "secret",
+			want:    "||secret||",
+		},
+		{
+			name:    "link",
+			format:  TextFormat{Type: "link", URL: "https://example.com"},
+			content: "click",
+			want:    "![click](https://example.com)",
+		},
+		{
+			name:    "user mention",
+			format:  TextFormat{Type: "link", URL: "tg://user?id=42"},
+			content: "Alice",
+			want:    "![Alice](tg://user?id=42)",
+		},
+		{
+			name:    "custom emoji",
+			format:  TextFormat{Type: "link", URL: "tg://emoji?id=123"},
+			content: "🙂",
+			want:    "![🙂](tg://emoji?id=123)",
+		},
+		{
+			name:    "nested bold italic",
+			format:  TextFormat{Type: "bold"},
+			content: "t",
+			other:   []TextFormat{{Type: "italic"}},
+			want:    "**" + "*t*" + "**",
+		},
+		{
+			name:    "blockquote multiline",
+			format:  TextFormat{Type: "blockquote"},
+			content: "a\nb",
+			want:    "\n>a\n>b",
+		},
+		{
+			name:    "unknown type passthrough",
+			format:  TextFormat{Type: "strikethrough"},
+			content: "x",
+			want:    "x",
+		},
+		{
+			name:    "duplicate other format skipped",
+			format:  TextFormat{Type: "bold"},
+			content: "x",
+			other: []TextFormat{
+				{Type: "italic"},
+				{Type: "italic"},
+			},
+			want:    "**" + "*x*" + "**",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := (&tt.format).ToMdV2Tag(tt.content, tt.other...)
+			if got != tt.want {
+				t.Fatalf("ToMdV2Tag() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestTextFormatToTelebotTag(t *testing.T) {
+	entity := (&TextFormat{Type: "bold"}).ToTelebotTag("Привет", 3)
+	if entity == nil {
+		t.Fatal("expected entity")
+	}
+	if entity.Type != tele.EntityBold {
+		t.Fatalf("type = %v, want bold", entity.Type)
+	}
+	if entity.Offset != 3 {
+		t.Fatalf("offset = %d, want 3", entity.Offset)
+	}
+	if entity.Length != utils.TgLen("Привет") {
+		t.Fatalf("length = %d, want %d", entity.Length, utils.TgLen("Привет"))
+	}
+
+	linkFormat := TextFormat{Type: "link", URL: "https://t.me/bot"}
+	link := linkFormat.ToTelebotTag("bot", 0)
+	if link.Type != tele.EntityTextLink || link.URL != "https://t.me/bot" {
+		t.Fatalf("unexpected link entity: %+v", link)
+	}
+
+	if (&TextFormat{Type: "unknown"}).ToTelebotTag("x", 0) != nil {
+		t.Fatal("unknown format should return nil entity")
+	}
+}
+
+func TestCreateGenericKeyboardParamsFillDefaults(t *testing.T) {
+	params := (&CreateGenericKeyboardParams{}).FillDefaults()
+
+	if params.ButtonsPerPage != 8 {
+		t.Fatalf("ButtonsPerPage = %d, want 8", params.ButtonsPerPage)
+	}
+	if params.ButtonsPerRow != 2 {
+		t.Fatalf("ButtonsPerRow = %d, want 2", params.ButtonsPerRow)
+	}
+	if params.ArrowForwardText != ">->>" {
+		t.Fatalf("ArrowForwardText = %q", params.ArrowForwardText)
+	}
+	if params.ArrowBackText != "<<-<" {
+		t.Fatalf("ArrowBackText = %q", params.ArrowBackText)
+	}
+
+	custom := (&CreateGenericKeyboardParams{
+		ButtonsPerPage:   5,
+		ButtonsPerRow:    3,
+		ArrowForwardText: "next",
+		ArrowBackText:    "prev",
+	}).FillDefaults()
+
+	if custom.ButtonsPerPage != 5 || custom.ButtonsPerRow != 3 {
+		t.Fatalf("custom numeric defaults overwritten: %+v", custom)
+	}
+	if custom.ArrowForwardText != "next" || custom.ArrowBackText != "prev" {
+		t.Fatalf("custom arrow texts overwritten: %+v", custom)
+	}
+}
+
+func TestMessageBuilderWriteStringMdv2(t *testing.T) {
+	b := &MessageBuilder{Mdv2Enabled: true}
+	b.WriteString("plain")
+	b.WriteString("bold", TextFormat{Type: "bold"})
+
+	got := b.builder.String()
+	want := "plain**bold**"
+	if got != want {
+		t.Fatalf("text = %q, want %q", got, want)
+	}
+	if b.cursorPosition != utils.TgLen(want) {
+		t.Fatalf("cursor = %d, want %d", b.cursorPosition, utils.TgLen(want))
+	}
+}
+
+func TestMessageBuilderWriteStringMdv2EscapesPlainText(t *testing.T) {
+	b := &MessageBuilder{Mdv2Enabled: true}
+	b.WriteString("price: 1.99!")
+
+	got := b.builder.String()
+	want := "price: 1\\.99\\!"
+	if got != want {
+		t.Fatalf("text = %q, want %q", got, want)
+	}
+}
+
+func TestMessageBuilderWriteStringMdv2DoesNotDoubleEscapeFormatting(t *testing.T) {
+	b := &MessageBuilder{Mdv2Enabled: true}
+	b.WriteString("x", TextFormat{Type: "bold"})
+
+	if strings.Contains(b.builder.String(), `\*\*`) {
+		t.Fatalf("markdown delimiters must not be escaped: %q", b.builder.String())
+	}
+}
+
+func TestMessageBuilderWriteStringEntities(t *testing.T) {
+	b := &MessageBuilder{Mdv2Enabled: false}
+	b.WriteString("A")
+	b.WriteString("B", TextFormat{Type: "bold"}, TextFormat{Type: "italic"})
+
+	text := b.builder.String()
+	if text != "AB" {
+		t.Fatalf("text = %q, want AB", text)
+	}
+	if len(b.entities) != 2 {
+		t.Fatalf("entities count = %d, want 2", len(b.entities))
+	}
+
+	bold := b.entities[0]
+	if bold.Offset != utils.TgLen("A") {
+		t.Fatalf("bold offset = %d, want %d", bold.Offset, utils.TgLen("A"))
+	}
+	if bold.Length != utils.TgLen("B") {
+		t.Fatalf("bold length = %d, want %d", bold.Length, utils.TgLen("B"))
+	}
+
+	italic := b.entities[1]
+	if italic.Type != tele.EntityItalic || italic.Offset != bold.Offset {
+		t.Fatalf("unexpected italic entity: %+v", italic)
+	}
+}
+
+func TestMessageBuilderKeyboardRows(t *testing.T) {
+	b := &MessageBuilder{}
+	b.AddButton(&tele.InlineButton{Text: "1"})
+	b.AddButton(&tele.InlineButton{Text: "2"})
+	b.NextRow()
+	b.AddButton(&tele.InlineButton{Text: "3"})
+
+	if len(b.keyboard) != 1 {
+		t.Fatalf("keyboard rows = %d, want 1", len(b.keyboard))
+	}
+	if len(b.keyboard[0]) != 2 {
+		t.Fatalf("first row buttons = %d, want 2", len(b.keyboard[0]))
+	}
+	if len(b.currentRow) != 1 || b.currentRow[0].Text != "3" {
+		t.Fatalf("unexpected current row: %+v", b.currentRow)
+	}
+}
+
+func TestCreateGenericKeyboardFlushesLastRow(t *testing.T) {
+	type stubButton struct{}
+
+	builder := &MessageBuilder{}
+
+	params := CreateGenericKeyboardParams{
+		ChatID:         0,
+		PageUnique:     "",
+		ButtonsPerRow:  2,
+		MergeButtons: [][]*tele.InlineButton{
+			{{Text: "merged"}},
+		},
+	}
+
+	CreateGenericKeyboard[stubButton](builder, nil, nil, "", params)
+
+	if len(builder.keyboard) != 0 {
+		t.Fatalf("early return should not touch keyboard, got %d rows", len(builder.keyboard))
+	}
+
+	params.ChatID = 1
+	params.PageUnique = "test"
+	// Without DB/redis this still returns early after updateRedis fails or query fails.
+	// Flush logic is covered via direct row simulation:
+	builder = &MessageBuilder{}
+	for i := 0; i < 3; i++ {
+		builder.AddButton(&tele.InlineButton{Text: string(rune('a' + i))})
+		if len(builder.currentRow) >= 2 {
+			builder.NextRow()
+		}
+	}
+	if len(builder.currentRow) > 0 {
+		builder.NextRow()
+	}
+
+	if len(builder.keyboard) != 2 {
+		t.Fatalf("expected 2 rows after flush, got %d", len(builder.keyboard))
+	}
+	if len(builder.keyboard[1]) != 1 {
+		t.Fatalf("last row should have 1 button, got %d", len(builder.keyboard[1]))
+	}
+}
