@@ -75,55 +75,55 @@ func (self *TextFormat) ToMdV2Tag(content string, other ...TextFormat) string {
 	return fmt.Sprintf(self.tagWrap(), content)
 }
 
-func (self *TextFormat) ToTelebotTag(content string, offset int) *tele.MessageEntity {
+func (self *TextFormat) ToTelebotTag(content string, offset int) tele.MessageEntity {
 	contentLen := utils.TgLen(content)
 
 	switch self.Type {
 	case "bold":
-		return &tele.MessageEntity{
+		return tele.MessageEntity{
 			Type: tele.EntityBold,
 			Offset: offset,
 			Length: contentLen,
 		}
 	case "italic":
-		return &tele.MessageEntity{
+		return tele.MessageEntity{
 			Type: tele.EntityItalic,
 			Offset: offset,
 			Length: contentLen,
 		}
 	case "underline":
-		return &tele.MessageEntity{
+		return tele.MessageEntity{
 			Type: tele.EntityUnderline,
 			Offset: offset,
 			Length: contentLen,
 		}
 	case "link":
-		return &tele.MessageEntity{
+		return tele.MessageEntity{
 			Type: tele.EntityTextLink,
 			Offset: offset,
 			Length: contentLen,
 			URL: self.URL,
 		}
 	case "blockquote":
-		return &tele.MessageEntity{
+		return tele.MessageEntity{
 			Type: tele.EntityBlockquote,
 			Offset: offset,
 			Length: contentLen,
 		}
 	case "mono":
-		return &tele.MessageEntity{
+		return tele.MessageEntity{
 			Type: tele.EntityCode,
 			Offset: offset,
 			Length: contentLen,
 		}
 	case "spoiler":
-		return &tele.MessageEntity{
+		return tele.MessageEntity{
 			Type: tele.EntitySpoiler,
 			Offset: offset,
 			Length: contentLen,
 		}
 	default:
-		return nil
+		return tele.MessageEntity{Type: ""}
 	}
 
 }
@@ -136,10 +136,10 @@ type MessageBuilder struct {
 	Mdv2Enabled bool
 
 	text string
-	entities []*tele.MessageEntity
+	entities []tele.MessageEntity
 
-	keyboard [][]*tele.InlineButton
-	currentRow []*tele.InlineButton
+	keyboard [][]tele.InlineButton
+	currentRow []tele.InlineButton
 
 	builder *strings.Builder
 	cursorPosition int
@@ -186,7 +186,7 @@ func (self *MessageBuilder) WriteString(s string, specialFormatting ...TextForma
 
 	for _, format := range specialFormatting {
 		entity := format.ToTelebotTag(s, offset)
-		if entity != nil {
+		if entity.Type != "" {
 			self.entities = append(self.entities, entity)
 		}
 	}
@@ -194,14 +194,14 @@ func (self *MessageBuilder) WriteString(s string, specialFormatting ...TextForma
 	return self
 }
 
-func (self *MessageBuilder) AddButton(button *tele.InlineButton) *MessageBuilder {
+func (self *MessageBuilder) AddButton(button tele.InlineButton) *MessageBuilder {
 	self.currentRow = append(self.currentRow, button)
 	return self
 }
 
 func (self *MessageBuilder) NextRow() *MessageBuilder {
 	self.keyboard = append(self.keyboard, self.currentRow)
-	self.currentRow = []*tele.InlineButton{}
+	self.currentRow = []tele.InlineButton{}
 	return self
 }
 
@@ -214,7 +214,7 @@ type CreateGenericKeyboardParams struct {
 	ArrowForwardText string
 	ArrowBackText string
 	ShowNavigation bool
-	MergeButtons [][]*tele.InlineButton
+	MergeButtons [][]tele.InlineButton
 }
 
 func (self *CreateGenericKeyboardParams) FillDefaults() *CreateGenericKeyboardParams {
@@ -262,7 +262,7 @@ func (self *MessageBuilder) updateRedis(redisConn redis.Conn, chatID int64, page
 }
 
 type Buttonable interface {
-	ToTelegramButton() *tele.InlineButton
+	ToTelegramButton() tele.InlineButton
 }
 
 // parseKeyboardPageDelta reads pageDelta from callback data (action?...&pageDelta=N).
@@ -369,8 +369,23 @@ func CreateGenericKeyboard[T any](
 	}
 
 	if maxPage > 0 && params.ShowNavigation {
-		builder.AddButton(&tele.InlineButton{Text: params.ArrowBackText, Data: utils.DumpCallbackData(params.PageUnique, map[string]any{"pageDelta": -1})})
-		builder.AddButton(&tele.InlineButton{Text: params.ArrowForwardText, Data: utils.DumpCallbackData(params.PageUnique, map[string]any{"pageDelta": 1})})
+		builder.AddButton(tele.InlineButton{Text: params.ArrowBackText, Data: utils.DumpCallbackData(params.PageUnique, map[string]any{"pageDelta": -1})})
+		builder.AddButton(tele.InlineButton{Text: params.ArrowForwardText, Data: utils.DumpCallbackData(params.PageUnique, map[string]any{"pageDelta": 1})})
 		builder.NextRow()
 	}
+}
+
+func (self *MessageBuilder) Build() *tele.Message {
+	msg := &tele.Message{
+		Text: self.builder.String(),
+		ReplyMarkup: &tele.ReplyMarkup{
+			InlineKeyboard: self.keyboard,
+		},
+	}
+
+	if !self.Mdv2Enabled {
+		msg.Entities = self.entities
+	}
+
+	return msg
 }
