@@ -113,7 +113,7 @@ func TestTextFormatToMdV2Tag(t *testing.T) {
 
 func TestTextFormatToTelebotTag(t *testing.T) {
 	entity := (&TextFormat{Type: "bold"}).ToTelebotTag("Привет", 3)
-	if entity == nil {
+	if entity.Type == "" {
 		t.Fatal("expected entity")
 	}
 	if entity.Type != tele.EntityBold {
@@ -132,7 +132,7 @@ func TestTextFormatToTelebotTag(t *testing.T) {
 		t.Fatalf("unexpected link entity: %+v", link)
 	}
 
-	if (&TextFormat{Type: "unknown"}).ToTelebotTag("x", 0) != nil {
+	if (&TextFormat{Type: "unknown"}).ToTelebotTag("x", 0).Type != "" {
 		t.Fatal("unknown format should return nil entity")
 	}
 }
@@ -232,10 +232,10 @@ func TestMessageBuilderWriteStringEntities(t *testing.T) {
 
 func TestMessageBuilderKeyboardRows(t *testing.T) {
 	b := &MessageBuilder{}
-	b.AddButton(&tele.InlineButton{Text: "1"})
-	b.AddButton(&tele.InlineButton{Text: "2"})
+	b.AddButton(tele.InlineButton{Text: "1"})
+	b.AddButton(tele.InlineButton{Text: "2"})
 	b.NextRow()
-	b.AddButton(&tele.InlineButton{Text: "3"})
+	b.AddButton(tele.InlineButton{Text: "3"})
 
 	if len(b.keyboard) != 1 {
 		t.Fatalf("keyboard rows = %d, want 1", len(b.keyboard))
@@ -257,7 +257,7 @@ func TestCreateGenericKeyboardFlushesLastRow(t *testing.T) {
 		ChatID:         0,
 		PageUnique:     "",
 		ButtonsPerRow:  2,
-		MergeButtons: [][]*tele.InlineButton{
+		MergeButtons: [][]tele.InlineButton{
 			{{Text: "merged"}},
 		},
 	}
@@ -274,7 +274,7 @@ func TestCreateGenericKeyboardFlushesLastRow(t *testing.T) {
 	// Flush logic is covered via direct row simulation:
 	builder = &MessageBuilder{}
 	for i := 0; i < 3; i++ {
-		builder.AddButton(&tele.InlineButton{Text: string(rune('a' + i))})
+		builder.AddButton(tele.InlineButton{Text: string(rune('a' + i))})
 		if len(builder.currentRow) >= 2 {
 			builder.NextRow()
 		}
