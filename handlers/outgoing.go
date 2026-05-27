@@ -211,6 +211,9 @@ func (r *Router) startSendResultConsumer(wg *sync.WaitGroup, queueName string, c
 			if corr == "" {
 				corr = delivery.CorrelationId
 			}
+			if e.IsNonNil(sr.Error) {
+				log.Printf("trace=%s handlers.result_received queue=%s rk=%s success=%t err=%v", corr, queueName, delivery.RoutingKey, sr.IsSuccess, sr.Error)
+			}
 			log.Printf("trace=%s handlers.result_received queue=%s rk=%s success=%t", corr, queueName, delivery.RoutingKey, sr.IsSuccess)
 			if corr == "" {
 				log.Printf("trace=missing handlers.result_missing_correlation queue=%s rk=%s", queueName, delivery.RoutingKey)

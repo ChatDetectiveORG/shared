@@ -3,10 +3,12 @@ package postgresmodels
 import (
 	"crypto/rand"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/ChatDetectiveORG/shared/telegram"
 	u "github.com/ChatDetectiveORG/shared/utils"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
@@ -32,6 +34,37 @@ type Telegramuser struct {
 
 	ReferralCode string `pg:"referral_code,unique,type:varchar(8),notnull"`
 	Settings *UserSettings `pg:"rel:has-one,fk:id,join_fk:linked_user_id"`
+}
+
+// ToTelegramButton satisfies the Buttonable interface in messageBuilder.go (see file_context_0).
+func (t *Telegramuser) ToTelegramButton(db orm.DB, args telegram.TelegramButtonConversionArgs) tele.InlineButton {
+	if args.PageUnique() == "chat_select_page" {
+		userBusinessConnectionIdHashIface := args.AdditionalData["userBusinessConnectionIdHash"]
+		userBusinessConnectionIdHash, _ := userBusinessConnectionIdHashIface.(string)
+
+		count, eRaw := db.Model((*Message)(nil)).
+			Where("chat_id_hash = ?", t.IDHash).
+			Where("business_connection_id_hash = ?", userBusinessConnectionIdHash).
+			Where("is_deleted = false").
+			Count()
+
+		if e.IsNonNil(eRaw) {
+			return tele.InlineButton{}
+		}
+
+		var fullName string
+		fullName, err := t.GetFullName()
+		if e.IsNonNil(err) {
+			return tele.InlineButton{}
+		}
+
+		return tele.InlineButton{
+			Text: fmt.Sprintf("%s [%d]", fullName, count),
+			Data: args.CallbackDataProducer(t.ReferralCode),
+		}
+	}
+
+	return tele.InlineButton{}
 }
 
 func (t *Telegramuser) GetFullName() (string, *e.ErrorInfo) {

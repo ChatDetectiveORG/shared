@@ -6,6 +6,7 @@ import (
 
 	"github.com/ChatDetectiveORG/shared/utils"
 	tele "gopkg.in/telebot.v4"
+	"github.com/go-pg/pg/v10/orm"
 )
 
 func TestTextFormatToMdV2Tag(t *testing.T) {
@@ -248,9 +249,13 @@ func TestMessageBuilderKeyboardRows(t *testing.T) {
 	}
 }
 
-func TestCreateGenericKeyboardFlushesLastRow(t *testing.T) {
-	type stubButton struct{}
+type stubButton struct{}
 
+func (b *stubButton) ToTelegramButton(db orm.DB, args TelegramButtonConversionArgs) tele.InlineButton {
+	return tele.InlineButton{Text: "stub"}
+}
+
+func TestCreateGenericKeyboardFlushesLastRow(t *testing.T) {
 	builder := &MessageBuilder{}
 
 	params := CreateGenericKeyboardParams{
@@ -262,7 +267,7 @@ func TestCreateGenericKeyboardFlushesLastRow(t *testing.T) {
 		},
 	}
 
-	CreateGenericKeyboard[stubButton](builder, nil, nil, "", params)
+	CreateGenericKeyboard[*stubButton](builder, nil, nil, nil, "", params)
 
 	if len(builder.keyboard) != 0 {
 		t.Fatalf("early return should not touch keyboard, got %d rows", len(builder.keyboard))
