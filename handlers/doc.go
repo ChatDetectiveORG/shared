@@ -2,7 +2,9 @@
 // Telegram payload в RabbitMQ exchange.
 //
 // Исходящие сообщения: тело AMQP = JSON envelope с tele.Message или альбомом;
-// routing key задаётся вызовом Emit/EmitAlbum.
+// routing key задаётся вызовом Emit/EmitAlbum (см. constants.OutgoingRoutingKey).
+// Фоновые сервисы без Router используют OutgoingPublisher.Start + NewHashe.
+//
 // Обратная связь от message-sender не обязательна: если второе сообщение — ответ пользователю на его же
 // апдейт, достаточно заполнить msg.ReplyTo (и Chat) из входящего update — тогда не нужен ID сообщения бота.
 // EmitWait нужен, когда от Telegram требуется message_id уже отправленного ботом сообщения

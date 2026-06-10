@@ -34,6 +34,9 @@ type Telegramuser struct {
 
 	ReferralCode string `pg:"referral_code,unique,type:varchar(8),notnull"`
 	Settings *UserSettings `pg:"rel:has-one,fk:id,join_fk:linked_user_id"`
+
+	InternalBalance int `pg:"internal_balance,default:0"`
+	InternalBalanceUpdatedAt time.Time `pg:"internal_balance_updated_at,default:now()"`
 }
 
 // ToTelegramButton satisfies the Buttonable interface in messageBuilder.go (see file_context_0).
@@ -112,6 +115,47 @@ func (t *Telegramuser) GetByTelegramID(db orm.DB, userID int64) *e.ErrorInfo {
 	}
 
 	return e.Nil()
+}
+
+// ResolveBotUserByBusinessConnection finds the business account owner for a connection.
+// It looks up by business_connection_id_hash first. When the hash is not linked yet,
+// an outbound business message (owner sender, customer chat) can backfill the mapping.
+func ResolveBotUserByBusinessConnection(db orm.DB, businessConnectionID string, msg *tele.Message) (*Telegramuser, *e.ErrorInfo) {
+	hash, err := u.ToSecureHash(businessConnectionID)
+	if e.IsNonNil(err) {
+		return nil, err
+	}
+
+	user := &Telegramuser{}
+	eraw := db.Model(user).Where("business_connection_id_hash = ?", hash).Select()
+	if eraw == nil {
+		return user, e.Nil()
+	}
+	if eraw != pg.ErrNoRows {
+		return nil, e.FromError(eraw, "failed to select bot user").WithData(map[string]any{
+			"business_connection_id_hash": hash,
+		})
+	}
+
+	if msg != nil && msg.Sender != nil && msg.Chat != nil && msg.Sender.ID != msg.Chat.ID {
+		owner := &Telegramuser{}
+		if getErr := owner.GetByTelegramID(db, msg.Sender.ID); e.IsNonNil(getErr) {
+			return nil, e.FromError(getErr, "failed to select bot user").WithData(map[string]any{
+				"business_connection_id_hash": hash,
+			})
+		}
+		owner.BusinessConnectionIDHash = hash
+		owner.UpdatedAt = time.Now()
+		_, eraw = db.Model(owner).WherePK().Column("business_connection_id_hash", "updated_at").Update()
+		if eraw != nil {
+			return nil, e.FromError(eraw, "failed to update business connection id hash")
+		}
+		return owner, e.Nil()
+	}
+
+	return nil, e.FromError(eraw, "bot user not found for business connection").WithData(map[string]any{
+		"business_connection_id_hash": hash,
+	})
 }
 
 // UpdateUserData re-encrypts and persists the user's fullname, username, and metadata.

@@ -67,7 +67,7 @@ func (hch *HandlerChainHashe) marshalOutgoing(request *telegram.OutgoingRequest)
 
 func (hch *HandlerChainHashe) enqueue(routingKey string, body []byte, correlationID string, action string) *e.ErrorInfo {
 	if hch.jobs == nil {
-		return e.NewError("outgoing not configured", "call Router.StartOutgoing before Emit").
+		return e.NewError("outgoing not configured", "call OutgoingPublisher.Start or Router.StartOutgoing before Emit").
 			WithSeverity(e.Warning)
 	}
 	log.Printf("trace=%s %s rk=%s", correlationID, action, routingKey)
@@ -85,7 +85,7 @@ func (hch *HandlerChainHashe) enqueue(routingKey string, body []byte, correlatio
 
 func (hch *HandlerChainHashe) waitResult(ctx context.Context, routingKey string, body []byte, action string) (*SendResult, *e.ErrorInfo) {
 	if hch.jobs == nil || hch.waiters == nil {
-		return nil, e.NewError("outgoing not configured", "call Router.StartOutgoing before "+action).
+		return nil, e.NewError("outgoing not configured", "call OutgoingPublisher.Start or Router.StartOutgoing before "+action).
 			WithSeverity(e.Warning)
 	}
 

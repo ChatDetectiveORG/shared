@@ -10,6 +10,7 @@
 | **Endpoint** | `endpoint.go` | Имя, `HandlerChain`, `UpdateFilter`. Создаётся через `Init(name, chain, filter)`. |
 | **HandlerChain** | `handlerChain.go` | Последовательность шагов с таймаутом; внутри прогона доступен **HandlerChainHashe**. |
 | **HandlerChainHashe** | `handlerHashe.go` | Контекст одного прогона: `Add`/`Get`/`Trunc`, `Emit`, `EmitWait`, `RunID()`. |
+| **OutgoingPublisher** | `outgoing_publisher.go` | Standalone исходящая почта для фоновых сервисов: `Start`, `NewHashe`. |
 | **UpdateFilter** | `filters.go` | `Command`, `TextCommand`, `CallbackQueryJSON`, `BusinessEvent`, `And` / `Or`. |
 | **Исходящая почта** | `outgoing.go` | Логика `Router.StartOutgoing`: очередь результатов, публикация, consumer. |
 
@@ -21,7 +22,9 @@
 
 ## Исходящие сообщения (AMQP)
 
-- **Включение:** после готовности канала RabbitMQ один раз вызвать **`router.StartOutgoing(wg, podID, shardID)`** (тот же `podID` / шард, что и для биндинга очередей апдейтов, если они связаны).
+- **В Router:** после готовности канала RabbitMQ один раз вызвать **`router.StartOutgoing(wg, podID, shardID)`** (через `InitSharding` или вручную).
+- **В фоновых сервисах:** **`OutgoingPublisher`** — `NewOutgoingPublisher` → `Start(wg, ctx)` → `NewHashe()` → `Emit` / `EmitWait` (тот же API, что в chain-хендлерах).
+- **Routing key:** `constants.OutgoingRoutingKey` (`telegram.message.send`).
 - **Тело сообщения:** `json.Marshal(tele.Message)`.
 - **Routing key:** первый аргумент `Emit` / `EmitWait` (например, идентификатор бота для маршрутизации у получателя).
 - **CorrelationId** и заголовок `correlation_id` выставляются пакетом для связки с ответом.

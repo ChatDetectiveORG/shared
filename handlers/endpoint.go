@@ -5,8 +5,6 @@ import (
 
 	e "github.com/ChatDetectiveORG/shared/errors"
 	tele "gopkg.in/telebot.v4"
-
-	amqp "github.com/rabbitmq/amqp091-go"
 )
 
 // Endpoint — фильтр + цепочка хендлеров на один тип сценария.
@@ -15,12 +13,10 @@ type Endpoint struct {
 	HandlerChain HandlerChain
 	Filter       UpdateFilter
 
-	jobs            chan *publishEnvelope
-	rabbitmqChannel *amqp.Channel
-	outExchange     string
+	jobs chan *publishEnvelope
 }
 
-// Init задаёт имя, цепочку и фильтр. Исходящий AMQP подключается через Router.StartOutgoing.
+// Init задаёт имя, цепочку и фильтр. Исходящий AMQP подключается через Router.StartOutgoing или OutgoingPublisher.
 func (ep *Endpoint) Init(name string, chain HandlerChain, f UpdateFilter) *Endpoint {
 	ep.Name = name
 	ep.HandlerChain = chain
@@ -32,5 +28,15 @@ func (ep *Endpoint) runChain(update tele.Update, router *Router, wg *sync.WaitGr
 	if ep.Filter != nil && !ep.Filter.Filter(update) {
 		return e.Nil()
 	}
-	return ep.HandlerChain.WithWaitGroup(wg).Run(update, ep.jobs, router.sendWaiters, mirrorID)
+
+	jobs := ep.jobs
+	var waiters *sync.Map
+	if router != nil && router.publisher != nil {
+		if jobs == nil {
+			jobs = router.publisher.jobs
+		}
+		waiters = router.publisher.waiters
+	}
+
+	return ep.HandlerChain.WithWaitGroup(wg).Run(update, jobs, waiters, mirrorID)
 }

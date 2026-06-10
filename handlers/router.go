@@ -30,12 +30,8 @@ type Router struct {
 	mu       sync.Mutex
 	replicas map[string]chan updateEnvelope
 
-	outgoingMu          sync.Mutex
-	outgoingStarted     bool
-	sendResultConsumers map[int]bool
-	sendWaiters         *sync.Map
-	outgoingExchange    string
-	sendResultExchange  string
+	outgoingMu sync.Mutex
+	publisher  *OutgoingPublisher
 }
 
 type updateEnvelope struct {
