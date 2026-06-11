@@ -474,6 +474,10 @@ func (self *MessageBuilder) WithMessageID(messageID int) *MessageBuilder {
 }
 
 func (self *MessageBuilder) Build(chatID int64) *tele.Message {
+	if len(self.currentRow) > 0 {
+		self.NextRow()
+	}
+
 	msg := &tele.Message{
 		Chat: &tele.Chat{ID: chatID},
 		Text: self.builder.String(),
