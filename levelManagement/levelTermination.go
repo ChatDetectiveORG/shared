@@ -9,7 +9,7 @@ import (
 
 	"github.com/ChatDetectiveORG/shared/constants"
 	e "github.com/ChatDetectiveORG/shared/errors"
-	"github.com/ChatDetectiveORG/shared/postgresModels"
+	postgresmodels "github.com/ChatDetectiveORG/shared/postgresModels"
 	"github.com/ChatDetectiveORG/shared/telegram"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -35,8 +35,8 @@ func StartLevelTerminationLoop(ctx context.Context, interval time.Duration, conf
 			return
 		case <-ticker.C:
 			err := notifyExpiration(db, config, expirationNotification{
-				untilExpirationTime: 1 * time.Hour * 24,
-				delta: interval / 2,
+				untilExpirationTime:    1 * time.Hour * 24,
+				delta:                  interval / 2,
 				untilExpirationTimeStr: "1 день",
 			})
 			if e.IsNonNil(err) {
@@ -44,8 +44,8 @@ func StartLevelTerminationLoop(ctx context.Context, interval time.Duration, conf
 			}
 
 			err = notifyExpiration(db, config, expirationNotification{
-				untilExpirationTime: 3 * time.Hour * 24,
-				delta: interval / 2,
+				untilExpirationTime:    3 * time.Hour * 24,
+				delta:                  interval / 2,
 				untilExpirationTimeStr: "3 дня",
 			})
 			if e.IsNonNil(err) {
@@ -62,7 +62,7 @@ func StartLevelTerminationLoop(ctx context.Context, interval time.Duration, conf
 
 type expirationNotification struct {
 	untilExpirationTime time.Duration
-	delta time.Duration
+	delta               time.Duration
 
 	untilExpirationTimeStr string
 }
@@ -77,7 +77,7 @@ func notifyExpiration(db *pg.DB, cfg *config.Config, notification expirationNoti
 			Where("user_levels.until_timestamp >= ?", time.Now().Add(notification.untilExpirationTime).Add(-notification.delta)).
 			Where("user_levels.until_timestamp <= ?", time.Now().Add(notification.untilExpirationTime).Add(notification.delta)),
 		UntilExpirationTimeStr: notification.untilExpirationTimeStr,
-		Delete: false,
+		Delete:                 false,
 
 		Cfg: cfg,
 	}
@@ -102,10 +102,10 @@ func deleteExpired(db *pg.DB, cfg *config.Config) *e.ErrorInfo {
 }
 
 type taskCfg struct {
-	UserIdSelectQuery *orm.Query
-	UserLevelSelectQuery *orm.Query
+	UserIdSelectQuery      *orm.Query
+	UserLevelSelectQuery   *orm.Query
 	UntilExpirationTimeStr string
-	Delete bool
+	Delete                 bool
 
 	Cfg *config.Config
 }
@@ -209,7 +209,7 @@ func task(db *pg.DB, taskCfg taskCfg) *e.ErrorInfo {
 
 		messageBuilder := telegram.MessageBuilder{}
 		messageBuilder.WriteString(
-			"⛔️", telegram.TextFormat{Type: telegram.TextFormatTypeLink}.WithCustomEmojiID("5463358164705489689"),
+			"⛔️", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5463358164705489689"),
 		)
 		var doNotSendMessage bool
 		if taskCfg.Delete {
@@ -217,7 +217,7 @@ func task(db *pg.DB, taskCfg taskCfg) *e.ErrorInfo {
 				messageBuilder.WriteString(
 					"Твой уровень был снижен на ",
 				).WriteString(
-					strconv.Itoa(expireAmount), telegram.TextFormat{Type: telegram.TextFormatTypeBold},
+					strconv.Itoa(expireAmount), telegram.TextFormat{Type: telegram.Bold},
 				).AddButton(
 					tele.InlineButton{Text: "Продлить", Data: "-"},
 				)
@@ -228,7 +228,7 @@ func task(db *pg.DB, taskCfg taskCfg) *e.ErrorInfo {
 					messageBuilder.WriteString(
 						"Твой уровень был снижен на ",
 					).WriteString(
-						strconv.Itoa(delta), telegram.TextFormat{Type: telegram.TextFormatTypeBold},
+						strconv.Itoa(delta), telegram.TextFormat{Type: telegram.Bold},
 					).AddButton(
 						tele.InlineButton{Text: "Продлить", Data: "-"},
 					)
@@ -236,7 +236,7 @@ func task(db *pg.DB, taskCfg taskCfg) *e.ErrorInfo {
 					messageBuilder.WriteString(
 						"После пересчёта приглашённых пользователей, твой уровень повышен на ",
 					).WriteString(
-						strconv.Itoa(-delta), telegram.TextFormat{Type: telegram.TextFormatTypeBold},
+						strconv.Itoa(-delta), telegram.TextFormat{Type: telegram.Bold},
 					)
 				default:
 					doNotSendMessage = true
@@ -244,9 +244,9 @@ func task(db *pg.DB, taskCfg taskCfg) *e.ErrorInfo {
 			}
 		} else {
 			messageBuilder.WriteString(
-				"Через " + taskCfg.UntilExpirationTimeStr + " твой уровень будет снижен на ",
+				"Через "+taskCfg.UntilExpirationTimeStr+" твой уровень будет снижен на ",
 			).WriteString(
-				strconv.Itoa(expireAmount), telegram.TextFormat{Type: telegram.TextFormatTypeBold},
+				strconv.Itoa(expireAmount), telegram.TextFormat{Type: telegram.Bold},
 			).AddButton(
 				tele.InlineButton{Text: "Продлить", Data: "-"},
 			)

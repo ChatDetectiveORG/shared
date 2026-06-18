@@ -255,6 +255,159 @@ func (b *stubButton) ToTelegramButton(db orm.DB, args TelegramButtonConversionAr
 	return tele.InlineButton{Text: "stub"}
 }
 
+func TestMessageBuilderAddFileUsesFileID(t *testing.T) {
+	b := &MessageBuilder{Mdv2Enabled: true}
+	b.WriteString("caption text")
+	b.AddFile("photo-file-id", "static/photo.png", "image/png")
+
+	msg := b.Build(42)
+	if msg.Photo == nil {
+		t.Fatal("expected photo attachment")
+	}
+	if msg.Photo.File.FileID != "photo-file-id" {
+		t.Fatalf("file id = %q, want photo-file-id", msg.Photo.File.FileID)
+	}
+	if msg.Photo.File.FileLocal != "static/photo.png" {
+		t.Fatalf("fallback path = %q, want static/photo.png", msg.Photo.File.FileLocal)
+	}
+	if msg.Caption != "caption text" {
+		t.Fatalf("caption = %q, want caption text", msg.Caption)
+	}
+	if msg.Text != "" {
+		t.Fatalf("text should be empty for media message, got %q", msg.Text)
+	}
+	if msg.Photo.Caption != "caption text" {
+		t.Fatalf("photo caption = %q, want caption text", msg.Photo.Caption)
+	}
+}
+
+func TestMessageBuilderAddFileUsesFallbackPath(t *testing.T) {
+	b := &MessageBuilder{}
+	b.AddFile("", "static/setupInstruction.gif", "image/gif")
+
+	msg := b.Build(1)
+	if msg.Animation == nil {
+		t.Fatal("expected animation attachment")
+	}
+	if msg.Animation.File.FileLocal != "static/setupInstruction.gif" {
+		t.Fatalf("file local = %q", msg.Animation.File.FileLocal)
+	}
+	if msg.Animation.MIME != "image/gif" {
+		t.Fatalf("mime = %q, want image/gif", msg.Animation.MIME)
+	}
+	if msg.Animation.FileName != "setupInstruction.gif" {
+		t.Fatalf("file name = %q, want setupInstruction.gif", msg.Animation.FileName)
+	}
+}
+
+func TestMessageBuilderAddFileInfersMimeFromExtension(t *testing.T) {
+	b := &MessageBuilder{}
+	b.AddFile("", "static/cipherExample.png", "")
+
+	msg := b.Build(1)
+	if msg.Photo == nil {
+		t.Fatal("expected photo attachment")
+	}
+}
+
+func TestMessageBuilderAddFileCategorizesMediaKinds(t *testing.T) {
+	tests := []struct {
+		name     string
+		mimeType string
+		path     string
+		check    func(*testing.T, *tele.Message)
+	}{
+		{
+			name:     "video",
+			mimeType: "video/mp4",
+			path:     "clip.mp4",
+			check: func(t *testing.T, msg *tele.Message) {
+				if msg.Video == nil {
+					t.Fatal("expected video")
+				}
+			},
+		},
+		{
+			name:     "audio",
+			mimeType: "audio/mpeg",
+			path:     "track.mp3",
+			check: func(t *testing.T, msg *tele.Message) {
+				if msg.Audio == nil {
+					t.Fatal("expected audio")
+				}
+			},
+		},
+		{
+			name:     "voice",
+			mimeType: "audio/ogg",
+			path:     "voice.ogg",
+			check: func(t *testing.T, msg *tele.Message) {
+				if msg.Voice == nil {
+					t.Fatal("expected voice")
+				}
+			},
+		},
+		{
+			name:     "document",
+			mimeType: "application/pdf",
+			path:     "file.pdf",
+			check: func(t *testing.T, msg *tele.Message) {
+				if msg.Document == nil {
+					t.Fatal("expected document")
+				}
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			b := &MessageBuilder{}
+			b.AddFile("file-id", tt.path, tt.mimeType)
+			tt.check(t, b.Build(1))
+		})
+	}
+}
+
+func TestMessageBuilderAddFileCaptionEntities(t *testing.T) {
+	b := &MessageBuilder{Mdv2Enabled: false}
+	b.WriteString("bold", TextFormat{Type: "bold"})
+	b.AddFile("photo-id", "photo.png", "image/png")
+
+	msg := b.Build(1)
+	if len(msg.CaptionEntities) != 1 {
+		t.Fatalf("caption entities = %d, want 1", len(msg.CaptionEntities))
+	}
+	if len(msg.Entities) != 0 {
+		t.Fatalf("entities should move to caption, got %d", len(msg.Entities))
+	}
+}
+
+func TestMessageBuilderBuildMediaGroup(t *testing.T) {
+	b := &MessageBuilder{Mdv2Enabled: true}
+	b.WriteString("album caption")
+	b.AddFile("photo-1", "a.png", "image/png")
+	b.AddFile("photo-2", "b.png", "image/png")
+	b.AddButton(tele.InlineButton{Text: "ok"})
+	b.NextRow()
+
+	group, ok := b.BuildMediaGroup(99)
+	if !ok {
+		t.Fatal("expected media group")
+	}
+	if group.Chat.ID != 99 {
+		t.Fatalf("chat id = %d, want 99", group.Chat.ID)
+	}
+	if len(group.Messages) != 2 {
+		t.Fatalf("messages = %d, want 2", len(group.Messages))
+	}
+	if group.Messages[0].Photo == nil || group.Messages[0].Photo.Caption != "album caption" {
+		t.Fatalf("unexpected first item caption: %+v", group.Messages[0].Photo)
+	}
+	if group.Messages[0].ReplyMarkup == nil || len(group.Messages[0].ReplyMarkup.InlineKeyboard) != 1 {
+		t.Fatalf("expected keyboard on first album item: %+v", group.Messages[0].ReplyMarkup)
+	}
+}
+
 func TestCreateGenericKeyboardFlushesLastRow(t *testing.T) {
 	builder := &MessageBuilder{}
 

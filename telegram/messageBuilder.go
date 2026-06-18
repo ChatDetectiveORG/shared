@@ -3,6 +3,7 @@ package telegram
 import (
 	"fmt"
 	"math"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,19 +18,19 @@ import (
 )
 
 const (
-	TextFormatTypeBold = "bold"
-	TextFormatTypeItalic = "italic"
-	TextFormatTypeUnderline = "underline"
-	TextFormatTypeLink = "link"
-	TextFormatTypeBlockquote = "blockquote"
-	TextFormatTypeMono = "mono"
-	TextFormatTypeSpoiler = "spoiler"
-	TextFormatTypeStrikethrough = "strikethrough"
+	Bold                        = "bold"
+	Italic                      = "italic"
+	Underline                   = "underline"
+	Link                        = "link"
+	Blockquote                  = "blockquote"
+	Mono                        = "mono"
+	Spoiler                     = "spoiler"
+	Strikethrough               = "strikethrough"
 )
 
 type TextFormat struct {
 	Type string
-	URL string
+	URL  string
 
 	isCustomEmoji bool
 }
@@ -67,6 +68,8 @@ func (self *TextFormat) tagWrap() string {
 		return "`" + "%s" + "`"
 	case "spoiler":
 		return "||" + "%s" + "||"
+	case "mention":
+		return "%s"
 	default:
 		return "%s"
 	}
@@ -99,14 +102,14 @@ func (self *TextFormat) ToMdV2Tag(content string, other ...TextFormat) string {
 	}
 
 	formatPriority := map[string]int{
-		"mono":           7,
-		"blockquote":     6,
-		"bold":           5,
-		"italic":         4,
-		"underline":      3,
-		"spoiler":        2,
-		"strikethrough":  1,
-		"link":           0, // Link should be outermost
+		"mono":          7,
+		"blockquote":    6,
+		"bold":          5,
+		"italic":        4,
+		"underline":     3,
+		"spoiler":       2,
+		"strikethrough": 1,
+		"link":          0, // Link should be outermost
 	}
 	// Sort by priority, higher is outermost (applied last)
 	slices.SortFunc(uniqueTypes, func(a, b TextFormat) int {
@@ -141,50 +144,50 @@ func (self *TextFormat) ToTelebotTag(content string, offset int) tele.MessageEnt
 	switch self.Type {
 	case "bold":
 		return tele.MessageEntity{
-			Type: tele.EntityBold,
+			Type:   tele.EntityBold,
 			Offset: offset,
 			Length: contentLen,
 		}
 	case "italic":
 		return tele.MessageEntity{
-			Type: tele.EntityItalic,
+			Type:   tele.EntityItalic,
 			Offset: offset,
 			Length: contentLen,
 		}
 	case "underline":
 		return tele.MessageEntity{
-			Type: tele.EntityUnderline,
+			Type:   tele.EntityUnderline,
 			Offset: offset,
 			Length: contentLen,
 		}
 	case "link":
 		return tele.MessageEntity{
-			Type: tele.EntityTextLink,
+			Type:   tele.EntityTextLink,
 			Offset: offset,
 			Length: contentLen,
-			URL: self.URL,
+			URL:    self.URL,
 		}
 	case "strikethrough":
 		return tele.MessageEntity{
-			Type: tele.EntityStrikethrough,
+			Type:   tele.EntityStrikethrough,
 			Offset: offset,
 			Length: contentLen,
 		}
 	case "blockquote":
 		return tele.MessageEntity{
-			Type: tele.EntityBlockquote,
+			Type:   tele.EntityBlockquote,
 			Offset: offset,
 			Length: contentLen,
 		}
 	case "mono":
 		return tele.MessageEntity{
-			Type: tele.EntityCode,
+			Type:   tele.EntityCode,
 			Offset: offset,
 			Length: contentLen,
 		}
 	case "spoiler":
 		return tele.MessageEntity{
-			Type: tele.EntitySpoiler,
+			Type:   tele.EntitySpoiler,
 			Offset: offset,
 			Length: contentLen,
 		}
@@ -201,16 +204,36 @@ func (self *TextFormat) ToTelebotTag(content string, offset int) tele.MessageEnt
 type MessageBuilder struct {
 	Mdv2Enabled bool
 
-	text string
+	text     string
 	entities []tele.MessageEntity
 
-	keyboard [][]tele.InlineButton
+	keyboard   [][]tele.InlineButton
 	currentRow []tele.InlineButton
 
-	builder *strings.Builder
+	builder        *strings.Builder
 	cursorPosition int
 
-	messageID int
+	messageID   int
+	mediaFiles  []mediaAttachment
+	mirrorFiles []MirrorFileAsset
+}
+
+type mediaKind int
+
+const (
+	mediaKindPhoto mediaKind = iota
+	mediaKindVideo
+	mediaKindAnimation
+	mediaKindAudio
+	mediaKindVoice
+	mediaKindDocument
+)
+
+type mediaAttachment struct {
+	file     tele.File
+	mimeType string
+	fileName string
+	kind     mediaKind
 }
 
 func (self *MessageBuilder) checkBuilder() {
@@ -262,6 +285,22 @@ func (self *MessageBuilder) WriteString(s string, specialFormatting ...TextForma
 	return self
 }
 
+func (self *MessageBuilder) WriteNextLine(s string, specialFormatting ...TextFormat) *MessageBuilder {
+	self.checkBuilder()
+
+	self.WriteString("\n"+s, specialFormatting...)
+
+	return self
+}
+
+func (self *MessageBuilder) CustomeEmoji(e string, id string) *MessageBuilder {
+	self.checkBuilder()
+
+	self.WriteString(e, TextFormat{Type: Link}.WithCustomEmojiID(id))
+
+	return self
+}
+
 func (self *MessageBuilder) AddButton(button tele.InlineButton) *MessageBuilder {
 	self.currentRow = append(self.currentRow, button)
 	return self
@@ -274,15 +313,15 @@ func (self *MessageBuilder) NextRow() *MessageBuilder {
 }
 
 type CreateGenericKeyboardParams struct {
-	ChatID int64
+	ChatID     int64
 	PageUnique string
 
-	ButtonsPerPage int
-	ButtonsPerRow int
+	ButtonsPerPage   int
+	ButtonsPerRow    int
 	ArrowForwardText string
-	ArrowBackText string
-	ShowNavigation bool
-	MergeButtons [][]tele.InlineButton
+	ArrowBackText    string
+	ShowNavigation   bool
+	MergeButtons     [][]tele.InlineButton
 
 	ButtonConversionArgs TelegramButtonConversionArgs
 }
@@ -308,11 +347,11 @@ func (self *CreateGenericKeyboardParams) FillDefaults() *CreateGenericKeyboardPa
 }
 
 var defaultCreateGenericKeyboardParams = CreateGenericKeyboardParams{
-	ButtonsPerPage: 8,
-	ButtonsPerRow: 2,
+	ButtonsPerPage:   8,
+	ButtonsPerRow:    2,
 	ArrowForwardText: ">->>",
-	ArrowBackText: "<<-<",
-	ShowNavigation: true,
+	ArrowBackText:    "<<-<",
+	ShowNavigation:   true,
 }
 
 // Returns: page, error
@@ -338,8 +377,8 @@ func (self *MessageBuilder) updateRedis(redisConn redis.Conn, chatID int64, page
 type CallbackDataProducer = func(string) string
 
 type TelegramButtonConversionArgs struct {
-	pageUnique string
-	AdditionalData map[string]any
+	pageUnique           string
+	AdditionalData       map[string]any
 	CallbackDataProducer CallbackDataProducer
 }
 
@@ -387,7 +426,7 @@ func CreateGenericKeyboard[T Buttonable](
 	if params.ChatID == 0 || params.PageUnique == "" {
 		return
 	}
-	
+
 	delta, ok := parseKeyboardPageDelta(callbackData)
 	if !ok {
 		return
@@ -412,13 +451,13 @@ func CreateGenericKeyboard[T Buttonable](
 	maxPage := int(math.Ceil(float64(count)/float64(params.ButtonsPerPage))) - 1
 
 	if page > maxPage {
-		page, err = builder.updateRedis(redisConn, params.ChatID, params.PageUnique, page * -1)
+		page, err = builder.updateRedis(redisConn, params.ChatID, params.PageUnique, page*-1)
 		if errors.IsNonNil(err) {
 			return
 		}
 	}
 	if page < 0 {
-		page, err = builder.updateRedis(redisConn, params.ChatID, params.PageUnique, maxPage + 1)
+		page, err = builder.updateRedis(redisConn, params.ChatID, params.PageUnique, maxPage+1)
 		if errors.IsNonNil(err) {
 			return
 		}
@@ -473,14 +512,230 @@ func (self *MessageBuilder) WithMessageID(messageID int) *MessageBuilder {
 	return self
 }
 
+func resolveBuilderFile(fileID, fallbackPath string) tele.File {
+	file := tele.File{FileID: fileID}
+	if fallbackPath != "" {
+		file.FileLocal = fallbackPath
+	}
+	return file
+}
+
+func mimeTypeFromExtension(fileName string) string {
+	switch strings.ToLower(filepath.Ext(fileName)) {
+	case ".jpg", ".jpeg":
+		return "image/jpeg"
+	case ".png":
+		return "image/png"
+	case ".webp":
+		return "image/webp"
+	case ".gif":
+		return "image/gif"
+	case ".mp4", ".mov":
+		return "video/mp4"
+	case ".mp3":
+		return "audio/mpeg"
+	case ".m4a":
+		return "audio/mp4"
+	case ".ogg", ".oga":
+		return "audio/ogg"
+	default:
+		return "application/octet-stream"
+	}
+}
+
+func categorizeMediaFile(mimeType, fileName string) mediaKind {
+	mimeType = strings.ToLower(strings.TrimSpace(mimeType))
+	if mimeType == "" {
+		mimeType = mimeTypeFromExtension(fileName)
+	}
+
+	switch {
+	case strings.HasPrefix(mimeType, "image/gif"):
+		return mediaKindAnimation
+	case strings.HasPrefix(mimeType, "image/"):
+		return mediaKindPhoto
+	case strings.HasPrefix(mimeType, "video/"):
+		return mediaKindVideo
+	case mimeType == "audio/ogg" || mimeType == "audio/opus" || strings.HasSuffix(strings.ToLower(fileName), ".ogg"):
+		return mediaKindVoice
+	case strings.HasPrefix(mimeType, "audio/"):
+		return mediaKindAudio
+	default:
+		return mediaKindDocument
+	}
+}
+
+func applyMediaAttachment(msg *tele.Message, attachment mediaAttachment) {
+	switch attachment.kind {
+	case mediaKindPhoto:
+		msg.Photo = &tele.Photo{File: attachment.file}
+	case mediaKindVideo:
+		msg.Video = &tele.Video{
+			File:     attachment.file,
+			MIME:     attachment.mimeType,
+			FileName: attachment.fileName,
+		}
+	case mediaKindAnimation:
+		msg.Animation = &tele.Animation{
+			File:     attachment.file,
+			MIME:     attachment.mimeType,
+			FileName: attachment.fileName,
+		}
+	case mediaKindAudio:
+		msg.Audio = &tele.Audio{
+			File:     attachment.file,
+			MIME:     attachment.mimeType,
+			FileName: attachment.fileName,
+		}
+	case mediaKindVoice:
+		msg.Voice = &tele.Voice{
+			File: attachment.file,
+			MIME: attachment.mimeType,
+		}
+	default:
+		msg.Document = &tele.Document{
+			File:     attachment.file,
+			MIME:     attachment.mimeType,
+			FileName: attachment.fileName,
+		}
+	}
+}
+
+func (self *MessageBuilder) applyCaption(msg *tele.Message, caption string) {
+	if caption == "" {
+		return
+	}
+
+	msg.Caption = caption
+	msg.Text = ""
+
+	if !self.Mdv2Enabled && len(self.entities) > 0 {
+		msg.CaptionEntities = self.entities
+		msg.Entities = nil
+	}
+
+	switch {
+	case msg.Photo != nil:
+		msg.Photo.Caption = caption
+	case msg.Video != nil:
+		msg.Video.Caption = caption
+	case msg.Animation != nil:
+		msg.Animation.Caption = caption
+	case msg.Audio != nil:
+		msg.Audio.Caption = caption
+	case msg.Voice != nil:
+		msg.Voice.Caption = caption
+	case msg.Document != nil:
+		msg.Document.Caption = caption
+	}
+}
+
+// AddMirrorFile registers a mirror-aware static asset.
+// The actual file_id is resolved later in ResolveMirrorFiles / EmitBuilt.
+func (self *MessageBuilder) AddMirrorFile(asset MirrorFileAsset) *MessageBuilder {
+	if asset.FallbackPath == "" && asset.PrimaryFileID == "" {
+		return self
+	}
+	self.mirrorFiles = append(self.mirrorFiles, asset)
+	return self
+}
+
+// MirrorFileAssets returns mirror assets registered via AddMirrorFile.
+func (self *MessageBuilder) MirrorFileAssets() []MirrorFileAsset {
+	if len(self.mirrorFiles) == 0 {
+		return nil
+	}
+	return append([]MirrorFileAsset(nil), self.mirrorFiles...)
+}
+
+// ConsumeMirrorFiles returns and clears mirror assets registered via AddMirrorFile.
+func (self *MessageBuilder) ConsumeMirrorFiles() []MirrorFileAsset {
+	assets := self.MirrorFileAssets()
+	self.mirrorFiles = nil
+	return assets
+}
+
+// AddFile attaches a Telegram file by cloud file_id with a local disk fallback.
+// mimeType is used to pick the correct media kind; when empty it is inferred from fallbackPath.
+func (self *MessageBuilder) AddFile(fileID string, fallbackPath string, mimeType string) *MessageBuilder {
+	file := resolveBuilderFile(fileID, fallbackPath)
+	if file.FileID == "" && file.FileLocal == "" {
+		return self
+	}
+
+	fileName := filepath.Base(fallbackPath)
+	if fileName == "." || fileName == "/" {
+		fileName = ""
+	}
+	if mimeType == "" {
+		mimeType = mimeTypeFromExtension(fileName)
+	}
+
+	self.mediaFiles = append(self.mediaFiles, mediaAttachment{
+		file:     file,
+		mimeType: mimeType,
+		fileName: fileName,
+		kind:     categorizeMediaFile(mimeType, fileName),
+	})
+
+	return self
+}
+
+// BuildMediaGroup assembles an album from all files added via AddFile.
+// Caption and entities from WriteString are applied to the first media item.
+func (self *MessageBuilder) BuildMediaGroup(chatID int64) (*MediaGroup, bool) {
+	if len(self.mediaFiles) == 0 {
+		return nil, false
+	}
+
+	if len(self.currentRow) > 0 {
+		self.NextRow()
+	}
+
+	caption := ""
+	if self.builder != nil {
+		caption = self.builder.String()
+	}
+
+	messages := make([]*tele.Message, 0, len(self.mediaFiles))
+	for _, attachment := range self.mediaFiles {
+		mediaMessage := &tele.Message{}
+		applyMediaAttachment(mediaMessage, attachment)
+		messages = append(messages, mediaMessage)
+	}
+
+	if caption != "" {
+		setMediaGroupCaption(messages[0], caption)
+		if !self.Mdv2Enabled && len(self.entities) > 0 {
+			messages[0].CaptionEntities = self.entities
+		}
+	}
+
+	if len(self.keyboard) > 0 {
+		HideSendOptsIntoMessage(messages[0], &tele.SendOptions{
+			ReplyMarkup: &tele.ReplyMarkup{InlineKeyboard: self.keyboard},
+		})
+	}
+
+	return &MediaGroup{
+		Chat:     &tele.Chat{ID: chatID},
+		Messages: messages,
+	}, true
+}
+
 func (self *MessageBuilder) Build(chatID int64) *tele.Message {
 	if len(self.currentRow) > 0 {
 		self.NextRow()
 	}
 
+	text := ""
+	if self.builder != nil {
+		text = self.builder.String()
+	}
+
 	msg := &tele.Message{
 		Chat: &tele.Chat{ID: chatID},
-		Text: self.builder.String(),
+		Text: text,
 		ReplyMarkup: &tele.ReplyMarkup{
 			InlineKeyboard: self.keyboard,
 		},
@@ -492,6 +747,11 @@ func (self *MessageBuilder) Build(chatID int64) *tele.Message {
 
 	if !self.Mdv2Enabled {
 		msg.Entities = self.entities
+	}
+
+	if len(self.mediaFiles) == 1 {
+		applyMediaAttachment(msg, self.mediaFiles[0])
+		self.applyCaption(msg, text)
 	}
 
 	return msg
