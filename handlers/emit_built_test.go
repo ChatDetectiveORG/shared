@@ -8,6 +8,7 @@ import (
 	"time"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
+	"github.com/ChatDetectiveORG/shared/messageBuilder"
 	"github.com/ChatDetectiveORG/shared/telegram"
 	tele "gopkg.in/telebot.v4"
 )
@@ -17,9 +18,9 @@ func TestEmitBuiltPublishesResolvedMessage(t *testing.T) {
 	waiters := &sync.Map{}
 	hashe := HandlerChainHashe{}.Init(jobs, waiters, "run-built")
 
-	builder := &telegram.MessageBuilder{Mdv2Enabled: true}
+	builder := &messageBuilder.MessageBuilder{Mdv2Enabled: true}
 	builder.WriteString("caption")
-	builder.AddMirrorFile(telegram.MirrorFileAsset{
+	builder.AddMirrorFile(messageBuilder.MirrorFileAsset{
 		PrimaryFileID: "primary-id",
 		FallbackPath:  "static/photo.png",
 		MimeType:      "image/png",
@@ -56,8 +57,8 @@ func TestEmitBuiltMirrorUsesEmitWait(t *testing.T) {
 	waiters := &sync.Map{}
 	hashe := HandlerChainHashe{}.Init(jobs, waiters, "run-built-mirror", "1")
 
-	builder := &telegram.MessageBuilder{}
-	builder.AddMirrorFile(telegram.MirrorFileAsset{
+	builder := &messageBuilder.MessageBuilder{}
+	builder.AddMirrorFile(messageBuilder.MirrorFileAsset{
 		FallbackPath:  "static/setupInstruction.gif",
 		MimeType:      "image/gif",
 		MirrorFileKey: "installation_animation",

@@ -56,7 +56,7 @@ func NewMirror(db orm.DB, owner *Telegramuser, token string, botID int64, botUse
 		status = MirrorStatusPending
 	}
 	mirror := &Mirror{
-		Unique:        unique,
+		Unique:      unique,
 		Status:      status,
 		Token:       encryptedToken,
 		TokenHash:   tokenHash,
@@ -177,10 +177,24 @@ func MarkMirrorUsed(db orm.DB, mirrorID int, now time.Time) *e.ErrorInfo {
 	return e.Nil()
 }
 
+// MirrorAlreadyActivatedBy reports whether the mirror was already activated by the given
+// payment. Used to keep mirror activation idempotent on duplicate pre-checkout deliveries.
+func MirrorAlreadyActivatedBy(mirror *Mirror, sourcePaymentID *int) bool {
+	if mirror == nil || sourcePaymentID == nil {
+		return false
+	}
+	return mirror.Status == MirrorStatusActive &&
+		mirror.SourcePaymentID != nil &&
+		*mirror.SourcePaymentID == *sourcePaymentID
+}
+
 func ActivateMirror(db orm.DB, mirrorID int, sourcePaymentID *int, now time.Time) (*Mirror, *e.ErrorInfo) {
 	mirror, err := FindMirrorByID(db, mirrorID)
 	if e.IsNonNil(err) {
 		return nil, err
+	}
+	if MirrorAlreadyActivatedBy(mirror, sourcePaymentID) {
+		return mirror, e.Nil()
 	}
 	paidUntil := now.AddDate(0, 1, 0)
 	mirror.Status = MirrorStatusActive

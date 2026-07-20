@@ -1,5 +1,10 @@
 package constants
 
+import (
+	"os"
+	"strings"
+)
+
 // Reply-keyboard button texts. Used both as display labels and filter strings.
 const (
 	BtnInstallGuide    = "Инструкция по установке"
@@ -19,26 +24,27 @@ const (
 	UniqueToggleExtExport = "toggle_ext_export"
 	UniqueBonusSelect     = "bonus_select"
 	UniqueBonusDetails    = "bonus_details"
-	
-	UniqueMirrorList      = "mirror_list"
-	UniqueMirrorDetails   = "mirror_details"
-	UniqueMirrorDelete    = "mirror_delete"
+
+	UniqueMirrorList          = "mirror_list"
+	UniqueMirrorDetails       = "mirror_details"
+	UniqueMirrorDelete        = "mirror_delete"
 	UniqueMirrorDeleteConfirm = "mirror_delete_confirm"
-	UniqueMirrorDeleteCancel = "mirror_delete_cancel"
-	UniqueMirrorCreate    = "mirror_create"
+	UniqueMirrorDeleteCancel  = "mirror_delete_cancel"
+	UniqueMirrorCreate        = "mirror_create"
 
-	UniqueBonusBack       = "bonus_back"
-	UniqueBonusMoney      = "bonus_money"
-	UniqueBonusDiscount   = "bonus_discount"
-	UniqueBonusLevels     = "bonus_levels"
-	UniqueWhatLevels      = "what_levels"
-	UniqueUpgradeLevel    = "upgrade_level"
-	UniqueDeleteConfirm   = "delete_confirm"
-	UniqueDeleteCancel    = "delete_cancel"
+	UniqueBonusBack     = "bonus_back"
+	UniqueBonusMoney    = "bonus_money"
+	UniqueBonusDiscount = "bonus_discount"
+	UniqueBonusLevels   = "bonus_levels"
+	UniqueWhatLevels    = "what_levels"
+	UniqueUpgradeLevel  = "upgrade_level"
+	UniqueDeleteConfirm = "delete_confirm"
+	UniqueDeleteCancel  = "delete_cancel"
+	UniqueLegalConsent  = "legal_consent"
 
-	UniqueChatSelectPage  = "chat_select_page"
-	UniqueGoToChat        = "goto_chat"
-	UniqueRestoreChat     = "restore_chat"
+	UniqueChatSelectPage = "chat_select_page"
+	UniqueGoToChat       = "goto_chat"
+	UniqueRestoreChat    = "restore_chat"
 )
 
 // Callback data field names used in the export flow. Centralised so encoder and decoder
@@ -83,13 +89,42 @@ const (
 // ReferralBonusRub is the cash bonus amount per referred user, in rubles.
 const ReferralBonusRub = 5
 
-const Month = 30 * 24 * 60 * 60
-
-// Referral bonus durations
 const (
-	ReferralLevelsDurationSec = 6 * Month
-	ReferralDiscountDurationSec = 1 * Month
+	Day   = 24 * 60 * 60
+	Month = 30 * Day
 )
 
+// Referral bonus durations (MVP: shortened periods).
+const (
+	// ReferralLevelsDurationSec is how long a referral bonus level stays active.
+	ReferralLevelsDurationSec = 7 * Day
+	// ReferralDiscountDurationSec is the informational period communicated to the
+	// invitor before the money reward is credited.
+	ReferralDiscountDurationSec = 1 * Day
+)
+
+// PurchasedLevelDurationDays is how long a purchased level stays active.
+const PurchasedLevelDurationDays = 7
+
+// defaultBotUsername is the fallback when BOT_USERNAME is not configured.
+const defaultBotUsername = "@MajorFanOfInnokentii_bot"
+
 // BotUsername is shown in several messages as a mention.
-const BotUsername = "@MajorFanOfInnokentii_bot"
+// Configured via the BOT_USERNAME environment variable (with or without a leading "@").
+var BotUsername = resolveBotUsername()
+
+func resolveBotUsername() string {
+	username := strings.TrimSpace(os.Getenv("BOT_USERNAME"))
+	if username == "" {
+		return defaultBotUsername
+	}
+	if !strings.HasPrefix(username, "@") {
+		username = "@" + username
+	}
+	return username
+}
+
+// BotStartLink builds a https://t.me/<bot>?start=<param> deep link for the configured bot.
+func BotStartLink(startParam string) string {
+	return "https://t.me/" + strings.TrimPrefix(BotUsername, "@") + "?start=" + startParam
+}

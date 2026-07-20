@@ -1,4 +1,4 @@
-package telegram
+package messageBuilder
 
 import (
 	"strings"

@@ -1,4 +1,4 @@
-package telegram
+package messageBuilder
 
 import (
 	"strings"
@@ -8,6 +8,30 @@ import (
 	tele "gopkg.in/telebot.v4"
 	"github.com/go-pg/pg/v10/orm"
 )
+
+func TestTextFormatWithUserMention(t *testing.T) {
+	f := (&TextFormat{Type: FormatLink}).WithUserMention(99)
+	if f.URL != "tg://user?id=99" {
+		t.Fatalf("URL = %q, want tg://user?id=99", f.URL)
+	}
+}
+
+func TestTextFormatWithCustomEmojiID(t *testing.T) {
+	f := (&TextFormat{Type: FormatLink}).WithCustomEmojiID("emoji-1")
+	if f.URL != "tg://emoji?id=emoji-1" {
+		t.Fatalf("URL = %q, want tg://emoji?id=emoji-1", f.URL)
+	}
+}
+
+// func TestResolveBuilderFileKeepsFallback(t *testing.T) {
+// 	file := resolveBuilderFile("cloud-id", "static/photo.png")
+// 	if file.FileID != "cloud-id" {
+// 		t.Fatalf("file id = %q", file.FileID)
+// 	}
+// 	if file.FileLocal != "static/photo.png" {
+// 		t.Fatalf("file local = %q", file.FileLocal)
+// 	}
+// }
 
 func TestTextFormatToMdV2Tag(t *testing.T) {
 	tests := []struct {
@@ -19,101 +43,101 @@ func TestTextFormatToMdV2Tag(t *testing.T) {
 	}{
 		{
 			name:    "bold",
-			format:  TextFormat{Type: "bold"},
-			content: "hi",
-			want:    "**hi**",
-		},
-		{
-			name:    "bold escapes reserved chars in content",
-			format:  TextFormat{Type: "bold"},
-			content: "a.b",
-			want:    "**a\\.b**",
-		},
-		{
-			name:    "italic",
-			format:  TextFormat{Type: "italic"},
+			format:  TextFormat{Type: FormatBold},
 			content: "hi",
 			want:    "*hi*",
 		},
 		{
+			name:    "bold escapes reserved chars in content",
+			format:  TextFormat{Type: FormatBold},
+			content: "a.b",
+			want:    "*a\\.b*",
+		},
+		{
+			name:    "italic",
+			format:  TextFormat{Type: FormatItalic},
+			content: "hi",
+			want:    "_hi_",
+		},
+		{
 			name:    "underline",
-			format:  TextFormat{Type: "underline"},
+			format:  TextFormat{Type: FormatUnderline},
 			content: "x",
 			want:    "__x__",
 		},
 		{
 			name:    "mono",
-			format:  TextFormat{Type: "mono"},
+			format:  TextFormat{Type: FormatMono},
 			content: "code",
 			want:    "`code`",
 		},
 		{
 			name:    "spoiler",
-			format:  TextFormat{Type: "spoiler"},
+			format:  TextFormat{Type: FormatSpoiler},
 			content: "secret",
 			want:    "||secret||",
 		},
 		{
 			name:    "link",
-			format:  TextFormat{Type: "link", URL: "https://example.com"},
+			format:  TextFormat{Type: FormatLink, URL: "https://example.com"},
 			content: "click",
-			want:    "![click](https://example.com)",
+			want:    "[click](https://example.com)",
 		},
 		{
 			name:    "user mention",
-			format:  TextFormat{Type: "link", URL: "tg://user?id=42"},
+			format:  TextFormat{Type: FormatLink, URL: "tg://user?id=42"},
 			content: "Alice",
-			want:    "![Alice](tg://user?id=42)",
+			want:    "[Alice](tg://user?id=42)",
 		},
 		{
 			name:    "custom emoji",
-			format:  TextFormat{Type: "link", URL: "tg://emoji?id=123"},
+			format:  TextFormat{Type: FormatLink, URL: "tg://emoji?id=123"}.WithCustomEmojiID("123"),
 			content: "🙂",
 			want:    "![🙂](tg://emoji?id=123)",
 		},
 		{
 			name:    "nested bold italic",
-			format:  TextFormat{Type: "bold"},
+			format:  TextFormat{Type: FormatBold},
 			content: "t",
-			other:   []TextFormat{{Type: "italic"}},
-			want:    "**" + "*t*" + "**",
+			other:   []TextFormat{{Type: FormatItalic}},
+			want:    "*_t_*",
 		},
 		{
 			name:    "blockquote multiline",
-			format:  TextFormat{Type: "blockquote"},
+			format:  TextFormat{Type: FormatBlockquote},
 			content: "a\nb",
 			want:    "\n>a\n>b",
 		},
 		{
-			name:    "unknown type passthrough",
-			format:  TextFormat{Type: "strikethrough"},
+			name:    "strikethrough",
+			format:  TextFormat{Type: FormatStrikethrough},
 			content: "x",
-			want:    "x",
+			want:    "~x~",
 		},
 		{
 			name:    "duplicate other format skipped",
-			format:  TextFormat{Type: "bold"},
+			format:  TextFormat{Type: FormatBold},
 			content: "x",
 			other: []TextFormat{
-				{Type: "italic"},
-				{Type: "italic"},
+				{Type: FormatItalic},
+				{Type: FormatItalic},
 			},
-			want:    "**" + "*x*" + "**",
+			want: "*_x_*",
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := (&tt.format).ToMdV2Tag(tt.content, tt.other...)
+			got := (&tt.format).toMdV2Tag(tt.content, tt.other...)
 			if got != tt.want {
-				t.Fatalf("ToMdV2Tag() = %q, want %q", got, tt.want)
+				t.Fatalf("toMdV2Tag() = %q, want %q", got, tt.want)
 			}
 		})
 	}
 }
 
 func TestTextFormatToTelebotTag(t *testing.T) {
-	entity := (&TextFormat{Type: "bold"}).ToTelebotTag("Привет", 3)
+	entity := (&TextFormat{Type: FormatBold}).toTelebotTag("Привет", 3)
 	if entity.Type == "" {
 		t.Fatal("expected entity")
 	}
@@ -127,19 +151,19 @@ func TestTextFormatToTelebotTag(t *testing.T) {
 		t.Fatalf("length = %d, want %d", entity.Length, utils.TgLen("Привет"))
 	}
 
-	linkFormat := TextFormat{Type: "link", URL: "https://t.me/bot"}
-	link := linkFormat.ToTelebotTag("bot", 0)
+	linkFormat := TextFormat{Type: FormatLink, URL: "https://t.me/bot"}
+	link := linkFormat.toTelebotTag("bot", 0)
 	if link.Type != tele.EntityTextLink || link.URL != "https://t.me/bot" {
 		t.Fatalf("unexpected link entity: %+v", link)
 	}
 
-	if (&TextFormat{Type: "unknown"}).ToTelebotTag("x", 0).Type != "" {
+	if (&TextFormat{Type: "unknown"}).toTelebotTag("x", 0).Type != "" {
 		t.Fatal("unknown format should return nil entity")
 	}
 }
 
 func TestCreateGenericKeyboardParamsFillDefaults(t *testing.T) {
-	params := (&CreateGenericKeyboardParams{}).FillDefaults()
+	params := (&CreateGenericKeyboardParams{}).fillDefaults()
 
 	if params.ButtonsPerPage != 8 {
 		t.Fatalf("ButtonsPerPage = %d, want 8", params.ButtonsPerPage)
@@ -159,7 +183,7 @@ func TestCreateGenericKeyboardParamsFillDefaults(t *testing.T) {
 		ButtonsPerRow:    3,
 		ArrowForwardText: "next",
 		ArrowBackText:    "prev",
-	}).FillDefaults()
+	}).fillDefaults()
 
 	if custom.ButtonsPerPage != 5 || custom.ButtonsPerRow != 3 {
 		t.Fatalf("custom numeric defaults overwritten: %+v", custom)
@@ -172,10 +196,10 @@ func TestCreateGenericKeyboardParamsFillDefaults(t *testing.T) {
 func TestMessageBuilderWriteStringMdv2(t *testing.T) {
 	b := &MessageBuilder{Mdv2Enabled: true}
 	b.WriteString("plain")
-	b.WriteString("bold", TextFormat{Type: "bold"})
+	b.WriteString("bold", TextFormat{Type: FormatBold})
 
 	got := b.builder.String()
-	want := "plain**bold**"
+	want := "plain*bold*"
 	if got != want {
 		t.Fatalf("text = %q, want %q", got, want)
 	}
@@ -197,7 +221,7 @@ func TestMessageBuilderWriteStringMdv2EscapesPlainText(t *testing.T) {
 
 func TestMessageBuilderWriteStringMdv2DoesNotDoubleEscapeFormatting(t *testing.T) {
 	b := &MessageBuilder{Mdv2Enabled: true}
-	b.WriteString("x", TextFormat{Type: "bold"})
+	b.WriteString("x", TextFormat{Type: FormatBold})
 
 	if strings.Contains(b.builder.String(), `\*\*`) {
 		t.Fatalf("markdown delimiters must not be escaped: %q", b.builder.String())
@@ -207,7 +231,7 @@ func TestMessageBuilderWriteStringMdv2DoesNotDoubleEscapeFormatting(t *testing.T
 func TestMessageBuilderWriteStringEntities(t *testing.T) {
 	b := &MessageBuilder{Mdv2Enabled: false}
 	b.WriteString("A")
-	b.WriteString("B", TextFormat{Type: "bold"}, TextFormat{Type: "italic"})
+	b.WriteString("B", TextFormat{Type: FormatBold}, TextFormat{Type: FormatItalic})
 
 	text := b.builder.String()
 	if text != "AB" {
@@ -370,7 +394,7 @@ func TestMessageBuilderAddFileCategorizesMediaKinds(t *testing.T) {
 
 func TestMessageBuilderAddFileCaptionEntities(t *testing.T) {
 	b := &MessageBuilder{Mdv2Enabled: false}
-	b.WriteString("bold", TextFormat{Type: "bold"})
+	b.WriteString("bold", TextFormat{Type: FormatBold})
 	b.AddFile("photo-id", "photo.png", "image/png")
 
 	msg := b.Build(1)

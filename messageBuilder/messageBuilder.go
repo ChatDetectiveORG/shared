@@ -1,10 +1,9 @@
-package telegram
+package messageBuilder
 
 import (
 	"fmt"
 	"math"
 	"path/filepath"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -17,185 +16,7 @@ import (
 	"github.com/gomodule/redigo/redis"
 )
 
-const (
-	Bold                        = "bold"
-	Italic                      = "italic"
-	Underline                   = "underline"
-	Link                        = "link"
-	Blockquote                  = "blockquote"
-	Mono                        = "mono"
-	Spoiler                     = "spoiler"
-	Strikethrough               = "strikethrough"
-)
-
-type TextFormat struct {
-	Type string
-	URL  string
-
-	isCustomEmoji bool
-}
-
-func (self TextFormat) WithCustomEmojiID(id string) TextFormat {
-	self.URL = "tg://emoji?id=" + id
-	self.isCustomEmoji = true
-	return self
-}
-
-func (self TextFormat) WithUserMention(id int64) TextFormat {
-	self.URL = "tg://user?id=" + strconv.FormatInt(id, 10)
-	return self
-}
-
-func (self *TextFormat) tagWrap() string {
-	switch self.Type {
-	case "bold":
-		return "*" + "%s" + "*"
-	case "italic":
-		return "_" + "%s" + "_"
-	case "underline":
-		return "__" + "%s" + "__"
-	case "strikethrough":
-		return "~" + "%s" + "~"
-	case "link":
-		res := "[" + "%s" + "](" + self.URL + ")"
-		if self.isCustomEmoji {
-			res = "!" + res
-		}
-		return res
-	case "blockquote":
-		return "\n>%s"
-	case "mono":
-		return "`" + "%s" + "`"
-	case "spoiler":
-		return "||" + "%s" + "||"
-	case "mention":
-		return "%s"
-	default:
-		return "%s"
-	}
-}
-
-func (self *TextFormat) ToMdV2Tag(content string, other ...TextFormat) string {
-	content = utils.EscapeMarkdownV2(content)
-
-	// Deduplicate types, only keep the last occurrence of each type (so outermost is preserved)
-	typeMap := make(map[string]TextFormat)
-	order := []string{}
-	for _, f := range other {
-		typeMap[f.Type] = f
-		order = append(order, f.Type)
-	}
-	// Ensure self is always present and as outermost
-	typeMap[self.Type] = *self
-	order = append(order, self.Type)
-
-	// Remove any repeated types, only keeping the last occurrence.
-	uniqueTypes := []TextFormat{}
-	seen := map[string]struct{}{}
-	// Go in reverse so outermost (self) comes last
-	for i := len(order) - 1; i >= 0; i-- {
-		typ := order[i]
-		if _, ok := seen[typ]; !ok {
-			uniqueTypes = append([]TextFormat{typeMap[typ]}, uniqueTypes...)
-			seen[typ] = struct{}{}
-		}
-	}
-
-	formatPriority := map[string]int{
-		"mono":          7,
-		"blockquote":    6,
-		"bold":          5,
-		"italic":        4,
-		"underline":     3,
-		"spoiler":       2,
-		"strikethrough": 1,
-		"link":          0, // Link should be outermost
-	}
-	// Sort by priority, higher is outermost (applied last)
-	slices.SortFunc(uniqueTypes, func(a, b TextFormat) int {
-		ap, aok := formatPriority[a.Type]
-		bp, bok := formatPriority[b.Type]
-		if !aok {
-			ap = 100
-		}
-		if !bok {
-			bp = 100
-		}
-		return ap - bp
-	})
-
-	// Avoid double tags when one format would be directly nested in itself or nested inside a "link"
-	// Relies on above deduplication.
-
-	for _, format := range uniqueTypes {
-		// For blockquote, apply additional replace for newlines
-		if format.Type == "blockquote" {
-			content = strings.ReplaceAll(content, "\n", "\n>")
-		}
-		content = fmt.Sprintf(format.tagWrap(), content)
-	}
-
-	return content
-}
-
-func (self *TextFormat) ToTelebotTag(content string, offset int) tele.MessageEntity {
-	contentLen := utils.TgLen(content)
-
-	switch self.Type {
-	case "bold":
-		return tele.MessageEntity{
-			Type:   tele.EntityBold,
-			Offset: offset,
-			Length: contentLen,
-		}
-	case "italic":
-		return tele.MessageEntity{
-			Type:   tele.EntityItalic,
-			Offset: offset,
-			Length: contentLen,
-		}
-	case "underline":
-		return tele.MessageEntity{
-			Type:   tele.EntityUnderline,
-			Offset: offset,
-			Length: contentLen,
-		}
-	case "link":
-		return tele.MessageEntity{
-			Type:   tele.EntityTextLink,
-			Offset: offset,
-			Length: contentLen,
-			URL:    self.URL,
-		}
-	case "strikethrough":
-		return tele.MessageEntity{
-			Type:   tele.EntityStrikethrough,
-			Offset: offset,
-			Length: contentLen,
-		}
-	case "blockquote":
-		return tele.MessageEntity{
-			Type:   tele.EntityBlockquote,
-			Offset: offset,
-			Length: contentLen,
-		}
-	case "mono":
-		return tele.MessageEntity{
-			Type:   tele.EntityCode,
-			Offset: offset,
-			Length: contentLen,
-		}
-	case "spoiler":
-		return tele.MessageEntity{
-			Type:   tele.EntitySpoiler,
-			Offset: offset,
-			Length: contentLen,
-		}
-	default:
-		return tele.MessageEntity{Type: ""}
-	}
-
-}
+// b.Write([]t.T{t.T("Обычный текст"), t.B("Жирный текст"), t.B(t.I("Жирный подчёркнутый")), t.E("#", "1111"), t.T("Каждый элемент - новая строка. А выше кастомное эмодзи")})
 
 // Message builder is a helper to build comlex formatted messages
 // It allows to build mdv2 messages and messages formatted via hardcoded entities
@@ -242,6 +63,7 @@ func (self *MessageBuilder) checkBuilder() {
 	}
 }
 
+// Deprecated: Use WriteSlice instead
 func (self *MessageBuilder) writeString(s string, escape bool) {
 	self.checkBuilder()
 
@@ -253,6 +75,7 @@ func (self *MessageBuilder) writeString(s string, escape bool) {
 	self.cursorPosition += utils.TgLen(s)
 }
 
+// Deprecated: Use WriteSlice instead
 func (self *MessageBuilder) WriteString(s string, specialFormatting ...TextFormat) *MessageBuilder {
 	self.checkBuilder()
 
@@ -264,9 +87,9 @@ func (self *MessageBuilder) WriteString(s string, specialFormatting ...TextForma
 
 	if self.Mdv2Enabled {
 		if len(specialFormatting) > 1 {
-			self.writeString(specialFormatting[0].ToMdV2Tag(s, specialFormatting[1:]...), false)
+			self.writeString(specialFormatting[0].toMdV2Tag(s, specialFormatting[1:]...), false)
 		} else {
-			self.writeString(specialFormatting[0].ToMdV2Tag(s), false)
+			self.writeString(specialFormatting[0].toMdV2Tag(s), false)
 		}
 
 		return self
@@ -276,7 +99,7 @@ func (self *MessageBuilder) WriteString(s string, specialFormatting ...TextForma
 	self.writeString(s, true)
 
 	for _, format := range specialFormatting {
-		entity := format.ToTelebotTag(s, offset)
+		entity := format.toTelebotTag(s, offset)
 		if entity.Type != "" {
 			self.entities = append(self.entities, entity)
 		}
@@ -285,6 +108,7 @@ func (self *MessageBuilder) WriteString(s string, specialFormatting ...TextForma
 	return self
 }
 
+// Deprecated: Use WriteSlice instead
 func (self *MessageBuilder) WriteNextLine(s string, specialFormatting ...TextFormat) *MessageBuilder {
 	self.checkBuilder()
 
@@ -296,7 +120,7 @@ func (self *MessageBuilder) WriteNextLine(s string, specialFormatting ...TextFor
 func (self *MessageBuilder) CustomeEmoji(e string, id string) *MessageBuilder {
 	self.checkBuilder()
 
-	self.WriteString(e, TextFormat{Type: Link}.WithCustomEmojiID(id))
+	self.WriteString(e, TextFormat{Type: FormatLink}.WithCustomEmojiID(id))
 
 	return self
 }
@@ -326,7 +150,7 @@ type CreateGenericKeyboardParams struct {
 	ButtonConversionArgs TelegramButtonConversionArgs
 }
 
-func (self *CreateGenericKeyboardParams) FillDefaults() *CreateGenericKeyboardParams {
+func (self *CreateGenericKeyboardParams) fillDefaults() *CreateGenericKeyboardParams {
 	if self.ButtonsPerPage == 0 {
 		self.ButtonsPerPage = defaultCreateGenericKeyboardParams.ButtonsPerPage
 	}
@@ -374,12 +198,10 @@ func (self *MessageBuilder) updateRedis(redisConn redis.Conn, chatID int64, page
 	return p, errors.Nil()
 }
 
-type CallbackDataProducer = func(string) string
-
 type TelegramButtonConversionArgs struct {
-	pageUnique           string
-	AdditionalData       map[string]any
-	CallbackDataProducer CallbackDataProducer
+	pageUnique         string
+	AdditionalData     map[string]any
+	CallbackDataProducer func(string) string
 }
 
 func (self *TelegramButtonConversionArgs) setPageUnique(pageUnique string) {
@@ -437,7 +259,7 @@ func CreateGenericKeyboard[T Buttonable](
 		return
 	}
 
-	params.FillDefaults()
+	params.fillDefaults()
 
 	count, eRaw := query.Count()
 	if eRaw != nil {
@@ -640,17 +462,12 @@ func (self *MessageBuilder) AddMirrorFile(asset MirrorFileAsset) *MessageBuilder
 	return self
 }
 
-// MirrorFileAssets returns mirror assets registered via AddMirrorFile.
-func (self *MessageBuilder) MirrorFileAssets() []MirrorFileAsset {
+// ConsumeMirrorFiles returns and clears mirror assets registered via AddMirrorFile.
+func (self *MessageBuilder) ConsumeMirrorFiles() []MirrorFileAsset {
 	if len(self.mirrorFiles) == 0 {
 		return nil
 	}
-	return append([]MirrorFileAsset(nil), self.mirrorFiles...)
-}
-
-// ConsumeMirrorFiles returns and clears mirror assets registered via AddMirrorFile.
-func (self *MessageBuilder) ConsumeMirrorFiles() []MirrorFileAsset {
-	assets := self.MirrorFileAssets()
+	assets := append([]MirrorFileAsset(nil), self.mirrorFiles...)
 	self.mirrorFiles = nil
 	return assets
 }
@@ -679,6 +496,13 @@ func (self *MessageBuilder) AddFile(fileID string, fallbackPath string, mimeType
 	})
 
 	return self
+}
+
+// MediaGroup is a serializable Telegram album payload built from MessageBuilder.
+type MediaGroup struct {
+	Chat     *tele.Chat
+	Messages []*tele.Message
+	Silent   bool
 }
 
 // BuildMediaGroup assembles an album from all files added via AddFile.
@@ -712,7 +536,7 @@ func (self *MessageBuilder) BuildMediaGroup(chatID int64) (*MediaGroup, bool) {
 	}
 
 	if len(self.keyboard) > 0 {
-		HideSendOptsIntoMessage(messages[0], &tele.SendOptions{
+		applySendOptions(messages[0], &tele.SendOptions{
 			ReplyMarkup: &tele.ReplyMarkup{InlineKeyboard: self.keyboard},
 		})
 	}
@@ -755,4 +579,50 @@ func (self *MessageBuilder) Build(chatID int64) *tele.Message {
 	}
 
 	return msg
+}
+
+func setMediaGroupCaption(msg *tele.Message, caption string) {
+	if msg == nil {
+		return
+	}
+
+	msg.Caption = caption
+
+	switch {
+	case msg.Photo != nil:
+		msg.Photo.Caption = caption
+	case msg.Video != nil:
+		msg.Video.Caption = caption
+	case msg.Document != nil:
+		msg.Document.Caption = caption
+	case msg.Audio != nil:
+		msg.Audio.Caption = caption
+	case msg.Animation != nil:
+		msg.Animation.Caption = caption
+	}
+}
+
+func applySendOptions(msg *tele.Message, sendOptions *tele.SendOptions) {
+	if msg == nil || sendOptions == nil {
+		return
+	}
+
+	if msg.ReplyTo == nil {
+		msg.ReplyTo = sendOptions.ReplyTo
+	}
+
+	msg.ReplyMarkup = sendOptions.ReplyMarkup
+	if sendOptions.DisableWebPagePreview {
+		if msg.PreviewOptions == nil {
+			msg.PreviewOptions = &tele.PreviewOptions{}
+		}
+		msg.PreviewOptions.Disabled = true
+	}
+
+	for _, e := range sendOptions.Entities {
+		msg.Entities = append(msg.Entities, e)
+	}
+	msg.Protected = sendOptions.Protected
+	msg.HasMediaSpoiler = sendOptions.HasSpoiler
+	msg.EffectID = sendOptions.EffectID
 }

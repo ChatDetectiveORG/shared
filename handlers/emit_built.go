@@ -5,8 +5,9 @@ import (
 	"time"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
+	"github.com/ChatDetectiveORG/shared/messageBuilder"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
-	"github.com/ChatDetectiveORG/shared/telegram"
+	telegram "github.com/ChatDetectiveORG/shared/telegram"
 	"github.com/go-pg/pg/v10/orm"
 	tele "gopkg.in/telebot.v4"
 )
@@ -19,7 +20,7 @@ func (hch *HandlerChainHashe) EmitBuilt(
 	db orm.DB,
 	routingKey string,
 	chatID int64,
-	builder *telegram.MessageBuilder,
+	builder *messageBuilder.MessageBuilder,
 ) *e.ErrorInfo {
 	if builder == nil {
 		return e.NewError("builder is nil", "EmitBuilt").WithSeverity(e.Warning)
@@ -47,7 +48,7 @@ func (hch *HandlerChainHashe) EmitBuilt(
 	return upsertMirrorFileCache(db, hch.MirrorID(), mirrorAssets, sent)
 }
 
-func resolveMirrorFiles(builder *telegram.MessageBuilder, db orm.DB, mirrorID string, assets []telegram.MirrorFileAsset) *e.ErrorInfo {
+func resolveMirrorFiles(builder *messageBuilder.MessageBuilder, db orm.DB, mirrorID string, assets []messageBuilder.MirrorFileAsset) *e.ErrorInfo {
 	for _, asset := range assets {
 		fileID, err := resolveMirrorFileID(db, mirrorID, asset)
 		if e.IsNonNil(err) {
@@ -58,7 +59,7 @@ func resolveMirrorFiles(builder *telegram.MessageBuilder, db orm.DB, mirrorID st
 	return e.Nil()
 }
 
-func resolveMirrorFileID(db orm.DB, mirrorID string, asset telegram.MirrorFileAsset) (string, *e.ErrorInfo) {
+func resolveMirrorFileID(db orm.DB, mirrorID string, asset messageBuilder.MirrorFileAsset) (string, *e.ErrorInfo) {
 	if mirrorID == "" {
 		return asset.PrimaryFileID, e.Nil()
 	}
@@ -79,7 +80,7 @@ func resolveMirrorFileID(db orm.DB, mirrorID string, asset telegram.MirrorFileAs
 	return cachedFileID, e.Nil()
 }
 
-func upsertMirrorFileCache(db orm.DB, mirrorID string, assets []telegram.MirrorFileAsset, sent *tele.Message) *e.ErrorInfo {
+func upsertMirrorFileCache(db orm.DB, mirrorID string, assets []messageBuilder.MirrorFileAsset, sent *tele.Message) *e.ErrorInfo {
 	if db == nil || mirrorID == "" || len(assets) == 0 || sent == nil {
 		return e.Nil()
 	}

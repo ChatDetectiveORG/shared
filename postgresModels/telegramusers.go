@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/ChatDetectiveORG/shared/telegram"
+	telegram "github.com/ChatDetectiveORG/shared/messageBuilder"
 	u "github.com/ChatDetectiveORG/shared/utils"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
@@ -32,10 +32,10 @@ type Telegramuser struct {
 
 	Metadata []byte `pg:"metadata"`
 
-	ReferralCode string `pg:"referral_code,unique,type:varchar(8),notnull"`
-	Settings *UserSettings `pg:"rel:has-one,fk:id,join_fk:linked_user_id"`
+	ReferralCode string        `pg:"referral_code,unique,type:varchar(8),notnull"`
+	Settings     *UserSettings `pg:"rel:has-one,fk:id,join_fk:linked_user_id"`
 
-	InternalBalance int `pg:"internal_balance,default:0"`
+	InternalBalance          int       `pg:"internal_balance,default:0"`
 	InternalBalanceUpdatedAt time.Time `pg:"internal_balance_updated_at,default:now()"`
 }
 

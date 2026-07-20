@@ -56,11 +56,33 @@ func Decrypt(ciphertext []byte, key []byte) ([]byte, *e.ErrorInfo) {
 
 func GetMasterkey() ([]byte, *e.ErrorInfo) {
 	masterKey := []byte(os.Getenv("MASTER_KEY"))
-	if len(masterKey) == 0 {
-		return nil, e.FromError(errors.New("master key is not set"), "master key is not set").WithSeverity(e.Critical)
+	if err := ValidateMasterKey(masterKey); e.IsNonNil(err) {
+		return nil, err
 	}
 
 	return masterKey, e.Nil()
+}
+
+// ValidateMasterKey checks that the master key is present and has a valid AES key length.
+// Call it at service startup so misconfiguration fails fast instead of at first decrypt.
+func ValidateMasterKey(masterKey []byte) *e.ErrorInfo {
+	if len(masterKey) == 0 {
+		return e.FromError(errors.New("master key is not set"), "master key is not set").WithSeverity(e.Critical)
+	}
+	switch len(masterKey) {
+	case 16, 24, 32:
+		return e.Nil()
+	default:
+		return e.FromError(
+			errors.New("MASTER_KEY must be exactly 16, 24 or 32 bytes (AES-128/192/256)"),
+			"master key has invalid length",
+		).WithSeverity(e.Critical)
+	}
+}
+
+// ValidateMasterKeyFromEnv validates the MASTER_KEY environment variable.
+func ValidateMasterKeyFromEnv() *e.ErrorInfo {
+	return ValidateMasterKey([]byte(os.Getenv("MASTER_KEY")))
 }
 
 func DecryptUserKey(key []byte) ([]byte, *e.ErrorInfo) {

@@ -10,7 +10,6 @@ import (
 	"github.com/ChatDetectiveORG/shared/constants"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	postgresmodels "github.com/ChatDetectiveORG/shared/postgresModels"
-	"github.com/ChatDetectiveORG/shared/telegram"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 	tele "gopkg.in/telebot.v4"
@@ -20,6 +19,8 @@ import (
 	h "github.com/ChatDetectiveORG/shared/handlers"
 	"github.com/go-pg/pg/v10"
 	"github.com/go-pg/pg/v10/orm"
+
+	. "github.com/ChatDetectiveORG/shared/messageBuilder"
 )
 
 func StartLevelTerminationLoop(ctx context.Context, interval time.Duration, config *config.Config) {
@@ -207,52 +208,45 @@ func task(db *pg.DB, taskCfg taskCfg) *e.ErrorInfo {
 			}
 		}
 
-		messageBuilder := telegram.MessageBuilder{}
-		messageBuilder.WriteString(
-			"⛔️", telegram.TextFormat{Type: telegram.Link}.WithCustomEmojiID("5463358164705489689"),
+		messageBuilder := MessageBuilder{}
+		messageBuilder.Write(
+			E("5463358164705489689", "⛔️"),
 		)
+
 		var doNotSendMessage bool
+		// "Продлить" routes to the existing level purchase flow (upgrade_level callback
+		// handled by command-handler, which emits a 1-level invoice).
+		renewButton := tele.InlineButton{Text: "Продлить", Data: constants.UniqueUpgradeLevel}
+
 		if taskCfg.Delete {
 			if levelsGranted == 0 {
-				messageBuilder.WriteString(
-					"Твой уровень был снижен на ",
-				).WriteString(
-					strconv.Itoa(expireAmount), telegram.TextFormat{Type: telegram.Bold},
-				).AddButton(
-					tele.InlineButton{Text: "Продлить", Data: "-"},
-				)
+				messageBuilder.Write(
+					T("Твой уровень был снижен на "),
+					B(T(strconv.Itoa(expireAmount))),
+				).AddButton(renewButton)
 			} else {
 				delta := expireAmount - levelsGranted
 				switch {
 				case delta > 0:
-					messageBuilder.WriteString(
-						"Твой уровень был снижен на ",
-					).WriteString(
-						strconv.Itoa(delta), telegram.TextFormat{Type: telegram.Bold},
-					).AddButton(
-						tele.InlineButton{Text: "Продлить", Data: "-"},
-					)
+					messageBuilder.Write(
+						T("Твой уровень был снижен на "),
+						B(T(strconv.Itoa(delta))),
+					).AddButton(renewButton)
 				case delta < 0:
-					messageBuilder.WriteString(
-						"После пересчёта приглашённых пользователей, твой уровень повышен на ",
-					).WriteString(
-						strconv.Itoa(-delta), telegram.TextFormat{Type: telegram.Bold},
+					messageBuilder.Write(
+						T("После пересчёта приглашённых пользователей, твой уровень повышен на "),
+						B(T(strconv.Itoa(-delta))),
 					)
 				default:
 					doNotSendMessage = true
 				}
 			}
 		} else {
-			messageBuilder.WriteString(
-				"Через "+taskCfg.UntilExpirationTimeStr+" твой уровень будет снижен на ",
-			).WriteString(
-				strconv.Itoa(expireAmount), telegram.TextFormat{Type: telegram.Bold},
-			).AddButton(
-				tele.InlineButton{Text: "Продлить", Data: "-"},
-			)
+			messageBuilder.Write(
+				T("Через "+taskCfg.UntilExpirationTimeStr+" твой уровень будет снижен на "),
+				B(T(strconv.Itoa(expireAmount))),
+			).AddButton(renewButton)
 		}
-
-		// TODO: Add button to invoice level
 
 		if !doNotSendMessage {
 			tgID, tgErr := resolveTelegramUserID(db, userID, expireLevels)

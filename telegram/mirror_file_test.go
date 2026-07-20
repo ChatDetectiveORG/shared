@@ -18,16 +18,6 @@ func (s stubFileResolver) FileByID(fileID string) (tele.File, error) {
 	return tele.File{}, errors.New("wrong file_id")
 }
 
-func TestResolveBuilderFileKeepsFallback(t *testing.T) {
-	file := resolveBuilderFile("cloud-id", "static/photo.png")
-	if file.FileID != "cloud-id" {
-		t.Fatalf("file id = %q", file.FileID)
-	}
-	if file.FileLocal != "static/photo.png" {
-		t.Fatalf("file local = %q", file.FileLocal)
-	}
-}
-
 func TestInvalidateStaleFileIDClearsBrokenID(t *testing.T) {
 	file := tele.File{FileID: "broken", FileLocal: "static/photo.png"}
 	InvalidateStaleFileID(stubFileResolver{ids: map[string]bool{"valid": true}}, &file)

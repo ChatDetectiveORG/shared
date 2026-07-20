@@ -35,12 +35,19 @@ func (hch HandlerChainHashe) Init(jobs chan *publishEnvelope, waiters *sync.Map,
 		waiters:          waiters,
 		runID:            runID,
 		mirrorID:         resolvedMirrorID,
-		parseModeEnabled: false,
+		parseModeEnabled: true, // Because parse mode is used more ofnen, than not, default is True
 	}
 }
 
+// Deprecated: User DisableMdB2ParseMode instead
 func (hch *HandlerChainHashe) WithParseMode(enabled bool) *HandlerChainHashe {
 	hch.parseModeEnabled = enabled
+
+	return hch
+}
+
+func (hch *HandlerChainHashe) DisableMdB2ParseMode() *HandlerChainHashe {
+	hch.parseModeEnabled = false
 
 	return hch
 }

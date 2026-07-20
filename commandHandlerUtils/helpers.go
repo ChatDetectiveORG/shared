@@ -3,6 +3,7 @@ package commandhandlerutils
 import (
 	"time"
 
+	constants "github.com/ChatDetectiveORG/shared/constants"
 	e "github.com/ChatDetectiveORG/shared/errors"
 	models "github.com/ChatDetectiveORG/shared/postgresModels"
 	utils "github.com/ChatDetectiveORG/shared/utils"
@@ -99,13 +100,9 @@ func SelectAllInterlocutors(db *pg.DB, user *models.Telegramuser) ([]*models.Tel
 	return result, e.Nil()
 }
 
-
 // BuildReferralLink builds the referral start link for the given user.
-// The first 10 characters of the user's IDHash are used as the start parameter.
 func BuildReferralLink(user *models.Telegramuser) string {
-	startParam := user.ReferralCode
-
-	return "https://t.me/MajorFanOfInnokentii_bot?start=" + startParam
+	return constants.BotStartLink(user.ReferralCode)
 }
 
 // AnswerCallbackBanner sends a silent banner callback answer (shows at top, no popup).

@@ -6,14 +6,6 @@ import (
 	tele "gopkg.in/telebot.v4"
 )
 
-// MirrorFileAsset describes a static media asset that may need per-mirror file_id caching.
-type MirrorFileAsset struct {
-	PrimaryFileID string
-	FallbackPath  string
-	MimeType      string
-	MirrorFileKey string
-}
-
 // FileResolver can validate Telegram file_id values via getFile.
 type FileResolver interface {
 	FileByID(fileID string) (tele.File, error)
