@@ -71,7 +71,7 @@ func NewOutgoingCallbackRequest(cb *tele.Callback, resp *tele.CallbackResponse) 
 		Kind:             OutgoingRequestKindCallback,
 		Callback:         cb,
 		CallbackResponse: resp,
-		ParseModeEnabled: false,
+		Priority:         1, // PriorityCommand — answer before delete/edit traffic in message-sender
 	}
 }
 
