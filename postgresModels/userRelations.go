@@ -9,9 +9,9 @@ type UserRelations struct {
 
 	CreatedAt time.Time `pg:"created_at,default:now()"`
 
-	FirstUserID []byte
-	FirstUser   *Telegramuser `pg:"rel:has-one,fk:first_user_id"`
+	FirstUserIDHash string
+	FirstUser   *Telegramuser `pg:"rel:has-one,fk:first_user_id_hash"`
 
-	SecondUserID []byte
-	SecondUser   *Telegramuser `pg:"rel:has-one,fk:second_user_id"`
+	SecondUserIDHash string
+	SecondUser   *Telegramuser `pg:"rel:has-one,fk:second_user_id_hash"`
 }

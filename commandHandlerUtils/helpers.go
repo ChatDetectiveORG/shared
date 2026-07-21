@@ -63,8 +63,8 @@ func ContactsForUser(db *pg.DB, user *models.Telegramuser) ([]models.UserRelatio
 	var relations []models.UserRelations
 	eraw := db.Model(&relations).
 		WhereGroup(func(q *orm.Query) (*orm.Query, error) {
-			return q.WhereOr("first_user_id = ?", user.ID).
-				WhereOr("second_user_id = ?", user.ID), nil
+			return q.WhereOr("first_user_id_hash = ?", user.IDHash).
+				WhereOr("second_user_id_hash = ?", user.IDHash), nil
 		}).
 		Relation("FirstUser").
 		Relation("SecondUser").
@@ -77,7 +77,7 @@ func ContactsForUser(db *pg.DB, user *models.Telegramuser) ([]models.UserRelatio
 
 // OtherUserInRelation returns the user that is NOT the provided user in the relation.
 func OtherUserInRelation(relation models.UserRelations, user *models.Telegramuser) *models.Telegramuser {
-	if relation.FirstUser != nil && string(relation.FirstUser.ID) == string(user.ID) {
+	if relation.FirstUser != nil && relation.FirstUser.IDHash == user.IDHash {
 		return relation.SecondUser
 	}
 	return relation.FirstUser
