@@ -21,7 +21,7 @@ type Telegramuser struct {
 	ID                       []byte `pg:"id,pk"`
 	IDHash                   string `pg:"id_hash"`
 	BusinessConnectionIDHash string
-	IsConnected              bool `pg:"is_connected,notnull,default:false"`
+	IsConnected              bool `pg:"is_connected,notnull,default:false,use_zero"`
 
 	DataEncryptionKey []byte
 
