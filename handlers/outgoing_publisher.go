@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
+	"github.com/ChatDetectiveORG/shared/amqputil"
 	"github.com/google/uuid"
 
 	amqp "github.com/rabbitmq/amqp091-go"
@@ -16,6 +17,7 @@ const defaultJobsBuffer = 256
 // OutgoingConfig configures AMQP publishing and SendResult consumption for HandlerChainHashe.
 type OutgoingConfig struct {
 	Channel            *amqp.Channel
+	OpenChannel        func() (*amqp.Channel, error)
 	PodID              string
 	OutgoingExchange   string
 	SendResultExchange string
@@ -27,6 +29,7 @@ type OutgoingConfig struct {
 // Use it from background workers that do not run Router/Endpoint/tele.Update flows.
 type OutgoingPublisher struct {
 	channel            *amqp.Channel
+	publish            *amqputil.PublishChannel
 	podID              string
 	outgoingExchange   string
 	sendResultExchange string
@@ -66,6 +69,7 @@ func NewOutgoingPublisher(cfg OutgoingConfig) (*OutgoingPublisher, *e.ErrorInfo)
 
 	return &OutgoingPublisher{
 		channel:            cfg.Channel,
+		publish:            amqputil.NewPublishChannel(cfg.Channel, cfg.OpenChannel),
 		podID:              podID,
 		outgoingExchange:   outEx,
 		sendResultExchange: inEx,
@@ -139,6 +143,25 @@ func (p *OutgoingPublisher) EnsureSendResultConsumer(wg *sync.WaitGroup, shardID
 	return e.Nil()
 }
 
+// RefreshSendResultConsumers rebinds SendResult queues after the main AMQP channel was recreated.
+func (p *OutgoingPublisher) RefreshSendResultConsumers(ch *amqp.Channel, wg *sync.WaitGroup, ctx context.Context, replicaCount int) *e.ErrorInfo {
+	if p == nil || ch == nil {
+		return e.Nil()
+	}
+
+	p.mu.Lock()
+	p.channel = ch
+	p.sendResultConsumers = map[int]bool{}
+	p.mu.Unlock()
+
+	for i := 0; i < replicaCount; i++ {
+		if err := p.EnsureSendResultConsumer(wg, i, ctx); !err.IsNil() {
+			return err
+		}
+	}
+	return e.Nil()
+}
+
 // NewHashe returns a HandlerChainHashe wired to this publisher (same Emit API as in handler chains).
 func (p *OutgoingPublisher) NewHashe(mirrorID ...string) *HandlerChainHashe {
 	return HandlerChainHashe{}.Init(p.jobs, p.waiters, uuid.New().String(), mirrorID...)
@@ -168,7 +191,7 @@ func (p *OutgoingPublisher) startPublishLoop(wg *sync.WaitGroup, ctx context.Con
 			if job == nil {
 				continue
 			}
-			publishOutgoingJob(p.channel, p.outgoingExchange, p.podID, p.errorChannel, job)
+			publishOutgoingJob(p.publish, p.outgoingExchange, p.podID, p.errorChannel, job)
 		}
 	}()
 }

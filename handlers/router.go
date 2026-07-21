@@ -17,8 +17,9 @@ import (
 type Router struct {
 	Endpoints       []Endpoint
 	ErrorChannel    chan *e.ErrorInfo
-	RabbitmqChannel *amqp.Channel
-	ReplicaCount    int
+	RabbitmqChannel     *amqp.Channel
+	OpenRabbitmqChannel func() (*amqp.Channel, error)
+	ReplicaCount        int
 	PodID           string
 
 	// OutgoingExchange / SendResultExchange пустые строки → дефолты из outgoing.go
@@ -119,6 +120,25 @@ func (r *Router) listenShard() chan updateEnvelope {
 		}
 	}()
 	return updates
+}
+
+// RefreshRabbitmqSession updates the router channel and rebinds SendResult consumers after reconnect.
+func (r *Router) RefreshRabbitmqSession(ch *amqp.Channel, wg *sync.WaitGroup, ctx context.Context) *e.ErrorInfo {
+	if r == nil || ch == nil {
+		return e.Nil()
+	}
+
+	r.RabbitmqChannel = ch
+
+	r.outgoingMu.Lock()
+	pub := r.publisher
+	replicas := r.ReplicaCount
+	r.outgoingMu.Unlock()
+
+	if pub == nil || replicas <= 0 {
+		return e.Nil()
+	}
+	return pub.RefreshSendResultConsumers(ch, wg, ctx, replicas)
 }
 
 // Dispatch прогоняет update через все endpoint-ы с подходящим фильтром.

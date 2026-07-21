@@ -11,6 +11,7 @@ import (
 	"unicode"
 
 	e "github.com/ChatDetectiveORG/shared/errors"
+	"github.com/ChatDetectiveORG/shared/amqputil"
 
 	amqp "github.com/rabbitmq/amqp091-go"
 )
@@ -43,7 +44,7 @@ type publishEnvelope struct {
 	correlationID string
 }
 
-func publishOutgoingJob(ch *amqp.Channel, outExchange, podID string, errorChannel chan *e.ErrorInfo, job *publishEnvelope) {
+func publishOutgoingJob(pub *amqputil.PublishChannel, outExchange, podID string, errorChannel chan *e.ErrorInfo, job *publishEnvelope) {
 	pubCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -54,12 +55,10 @@ func publishOutgoingJob(ch *amqp.Channel, outExchange, podID string, errorChanne
 	// Must match QueueBind in EnsureSendResultConsumer (result always to shard 0 key).
 	resultRoutingKey := fmt.Sprintf("%s.q%02d", effectivePodID, 0)
 	log.Printf("trace=%s handlers.publish outgoing_exchange=%s outgoing_rk=%s result_rk=%s", job.correlationID, outExchange, job.routingKey, resultRoutingKey)
-	publishErr := ch.PublishWithContext(
+	publishErr := pub.Publish(
 		pubCtx,
 		outExchange,
 		job.routingKey,
-		false,
-		false,
 		amqp.Publishing{
 			ContentType:   "application/json",
 			CorrelationId: job.correlationID,
@@ -70,7 +69,6 @@ func publishOutgoingJob(ch *amqp.Channel, outExchange, podID string, errorChanne
 			},
 		},
 	)
-	cancel()
 	if publishErr != nil && errorChannel != nil {
 		errorChannel <- e.FromError(publishErr, "publish tele.Message").WithSeverity(e.Critical).PushStack()
 	}
@@ -167,6 +165,7 @@ func (r *Router) StartOutgoing(wg *sync.WaitGroup, podID string, shardID int, ct
 		}
 		pub, err := NewOutgoingPublisher(OutgoingConfig{
 			Channel:            r.RabbitmqChannel,
+			OpenChannel:        r.OpenRabbitmqChannel,
 			PodID:              effectivePodID,
 			OutgoingExchange:   r.OutgoingExchange,
 			SendResultExchange: r.SendResultExchange,
