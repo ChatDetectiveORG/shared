@@ -88,8 +88,41 @@ func (r *Router) InitSharding(podID string, wg *sync.WaitGroup, ctx context.Cont
 	for i := 0; i < r.ReplicaCount; i++ {
 		key := fmt.Sprintf("endpoint-%02d", i)
 		r.replicas[key] = r.listenShard()
-		r.StartOutgoing(wg, podID, i, ctx)
 	}
+}
+
+// ConnectRabbitmqSession wires the live AMQP channel into the router on first connect and after reconnect.
+func (r *Router) ConnectRabbitmqSession(ch *amqp.Channel, open func() (*amqp.Channel, error), wg *sync.WaitGroup, podID string, ctx context.Context) *e.ErrorInfo {
+	if r == nil || ch == nil {
+		return e.Nil()
+	}
+
+	r.RabbitmqChannel = ch
+	r.OpenRabbitmqChannel = open
+
+	r.outgoingMu.Lock()
+	hasPublisher := r.publisher != nil
+	replicas := r.ReplicaCount
+	r.outgoingMu.Unlock()
+
+	if replicas <= 0 {
+		return e.Nil()
+	}
+
+	if !hasPublisher {
+		effectivePodID := podID
+		if effectivePodID == "" {
+			effectivePodID = r.PodID
+		}
+		for i := 0; i < replicas; i++ {
+			if err := r.StartOutgoing(wg, effectivePodID, i, ctx); !err.IsNil() {
+				return err
+			}
+		}
+		return e.Nil()
+	}
+
+	return r.RefreshRabbitmqSession(ch, wg, ctx)
 }
 
 func (r *Router) listenShard() chan updateEnvelope {
