@@ -21,7 +21,7 @@ type Telegramuser struct {
 	ID                       []byte `pg:"id,pk"`
 	IDHash                   string `pg:"id_hash"`
 	BusinessConnectionIDHash string
-	LastBusinessConnectionIDHash string // Previous business connection id hash
+	IsConnected              bool `pg:"is_connected,notnull,default:false"`
 
 	DataEncryptionKey []byte
 
@@ -146,8 +146,9 @@ func ResolveBotUserByBusinessConnection(db orm.DB, businessConnectionID string, 
 			})
 		}
 		owner.BusinessConnectionIDHash = hash
+		owner.IsConnected = true
 		owner.UpdatedAt = time.Now()
-		_, eraw = db.Model(owner).WherePK().Column("business_connection_id_hash", "updated_at").Update()
+		_, eraw = db.Model(owner).WherePK().Column("business_connection_id_hash", "is_connected", "updated_at").Update()
 		if eraw != nil {
 			return nil, e.FromError(eraw, "failed to update business connection id hash")
 		}

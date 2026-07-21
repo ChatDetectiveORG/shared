@@ -113,8 +113,8 @@ func AnswerCallbackBanner(text string, cb *tele.Callback) *tele.CallbackResponse
 	}
 }
 
-// UserRelatedNonBotUsers returns related users who are NOT bot business users
-// (i.e., they have an empty BusinessConnectionIDHash).
+// UserRelatedNonBotUsers returns related users who do not have the bot connected
+// to their Telegram Business account.
 func UserRelatedNonBotUsers(db *pg.DB, user *models.Telegramuser) ([]*models.Telegramuser, *e.ErrorInfo) {
 	relations, err := ContactsForUser(db, user)
 	if e.IsNonNil(err) {
@@ -124,30 +124,37 @@ func UserRelatedNonBotUsers(db *pg.DB, user *models.Telegramuser) ([]*models.Tel
 	var result []*models.Telegramuser
 	for i := range relations {
 		other := OtherUserInRelation(relations[i], user)
-		if other != nil && other.BusinessConnectionIDHash == "" {
+		if other != nil && !other.IsConnected {
 			result = append(result, other)
 		}
 	}
 	return result, e.Nil()
 }
 
-// UpdateBusinessConnectionIDHash sets (or clears) the user's businessConnectionIDHash.
-func UpdateBusinessConnectionIDHash(db *pg.DB, user *models.Telegramuser, businessConnectionID string) *e.ErrorInfo {
-	if businessConnectionID == "" {
-		user.LastBusinessConnectionIDHash = user.BusinessConnectionIDHash
-		user.BusinessConnectionIDHash = ""
-	} else {
-		hash, err := utils.ToSecureHash(businessConnectionID)
-		if e.IsNonNil(err) {
-			return err
-		}
-		user.BusinessConnectionIDHash = hash
+// SetBusinessConnectionConnected stores the connection hash and marks the user as connected.
+func SetBusinessConnectionConnected(db *pg.DB, user *models.Telegramuser, businessConnectionID string) *e.ErrorInfo {
+	hash, err := utils.ToSecureHash(businessConnectionID)
+	if e.IsNonNil(err) {
+		return err
 	}
 
+	user.BusinessConnectionIDHash = hash
+	user.IsConnected = true
 	user.UpdatedAt = time.Now()
-	_, eraw := db.Model(user).WherePK().Column("business_connection_id_hash", "last_business_connection_id_hash", "updated_at").Update()
+	_, eraw := db.Model(user).WherePK().Column("business_connection_id_hash", "is_connected", "updated_at").Update()
 	if eraw != nil {
-		return e.FromError(eraw, "failed to update business connection id hash").WithSeverity(e.Notice)
+		return e.FromError(eraw, "failed to connect business connection").WithSeverity(e.Notice)
+	}
+	return e.Nil()
+}
+
+// SetBusinessConnectionDisconnected marks the user as disconnected without clearing the hash.
+func SetBusinessConnectionDisconnected(db *pg.DB, user *models.Telegramuser) *e.ErrorInfo {
+	user.IsConnected = false
+	user.UpdatedAt = time.Now()
+	_, eraw := db.Model(user).WherePK().Column("is_connected", "updated_at").Update()
+	if eraw != nil {
+		return e.FromError(eraw, "failed to disconnect business connection").WithSeverity(e.Notice)
 	}
 	return e.Nil()
 }
