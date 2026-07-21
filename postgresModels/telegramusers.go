@@ -21,6 +21,7 @@ type Telegramuser struct {
 	ID                       []byte `pg:"id,pk"`
 	IDHash                   string `pg:"id_hash"`
 	BusinessConnectionIDHash string
+	LastBusinessConnectionIDHash string // Previous business connection id hash
 
 	DataEncryptionKey []byte
 

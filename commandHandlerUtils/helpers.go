@@ -134,6 +134,7 @@ func UserRelatedNonBotUsers(db *pg.DB, user *models.Telegramuser) ([]*models.Tel
 // UpdateBusinessConnectionIDHash sets (or clears) the user's businessConnectionIDHash.
 func UpdateBusinessConnectionIDHash(db *pg.DB, user *models.Telegramuser, businessConnectionID string) *e.ErrorInfo {
 	if businessConnectionID == "" {
+		user.LastBusinessConnectionIDHash = user.BusinessConnectionIDHash
 		user.BusinessConnectionIDHash = ""
 	} else {
 		hash, err := utils.ToSecureHash(businessConnectionID)
@@ -144,7 +145,7 @@ func UpdateBusinessConnectionIDHash(db *pg.DB, user *models.Telegramuser, busine
 	}
 
 	user.UpdatedAt = time.Now()
-	_, eraw := db.Model(user).WherePK().Column("business_connection_id_hash", "updated_at").Update()
+	_, eraw := db.Model(user).WherePK().Column("business_connection_id_hash", "last_business_connection_id_hash", "updated_at").Update()
 	if eraw != nil {
 		return e.FromError(eraw, "failed to update business connection id hash").WithSeverity(e.Notice)
 	}
