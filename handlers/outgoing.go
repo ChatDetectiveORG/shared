@@ -37,14 +37,14 @@ func sendResultQueueName(podID string, shardID int) string {
 	return fmt.Sprintf("chatdetective.send.result.%s.q%02d", seg, shardID)
 }
 
-// publishEnvelope — задание на публикацию: тело = JSON telegram.OutgoingRequest.
-type publishEnvelope struct {
-	routingKey    string
-	body          []byte
-	correlationID string
+// PublishEnvelope — задание на публикацию: тело = JSON telegram.OutgoingRequest.
+type PublishEnvelope struct {
+	RoutingKey    string
+	Body          []byte
+	CorrelationID string
 }
 
-func publishOutgoingJob(pub *amqputil.PublishChannel, outExchange, podID string, errorChannel chan *e.ErrorInfo, job *publishEnvelope) {
+func publishOutgoingJob(pub *amqputil.PublishChannel, outExchange, podID string, errorChannel chan *e.ErrorInfo, job *PublishEnvelope) {
 	pubCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
@@ -54,17 +54,17 @@ func publishOutgoingJob(pub *amqputil.PublishChannel, outExchange, podID string,
 	}
 	// Must match QueueBind in EnsureSendResultConsumer (result always to shard 0 key).
 	resultRoutingKey := fmt.Sprintf("%s.q%02d", effectivePodID, 0)
-	log.Printf("trace=%s handlers.publish outgoing_exchange=%s outgoing_rk=%s result_rk=%s", job.correlationID, outExchange, job.routingKey, resultRoutingKey)
+	log.Printf("trace=%s handlers.publish outgoing_exchange=%s outgoing_rk=%s result_rk=%s", job.CorrelationID, outExchange, job.RoutingKey, resultRoutingKey)
 	publishErr := pub.Publish(
 		pubCtx,
 		outExchange,
-		job.routingKey,
+		job.RoutingKey,
 		amqp.Publishing{
 			ContentType:   "application/json",
-			CorrelationId: job.correlationID,
-			Body:          job.body,
+			CorrelationId: job.CorrelationID,
+			Body:          job.Body,
 			Headers: amqp.Table{
-				"correlation_id":     job.correlationID,
+				"correlation_id":     job.CorrelationID,
 				"result_routing_key": resultRoutingKey,
 			},
 		},
@@ -73,9 +73,9 @@ func publishOutgoingJob(pub *amqputil.PublishChannel, outExchange, podID string,
 		errorChannel <- e.FromError(publishErr, "publish tele.Message").WithSeverity(e.Critical).PushStack()
 	}
 	if publishErr != nil {
-		log.Printf("trace=%s handlers.publish_error exchange=%s rk=%s err=%v", job.correlationID, outExchange, job.routingKey, publishErr)
+		log.Printf("trace=%s handlers.publish_error exchange=%s rk=%s err=%v", job.CorrelationID, outExchange, job.RoutingKey, publishErr)
 	} else {
-		log.Printf("trace=%s handlers.publish_ok outgoing_exchange=%s outgoing_rk=%s", job.correlationID, outExchange, job.routingKey)
+		log.Printf("trace=%s handlers.publish_ok outgoing_exchange=%s outgoing_rk=%s", job.CorrelationID, outExchange, job.RoutingKey)
 	}
 }
 

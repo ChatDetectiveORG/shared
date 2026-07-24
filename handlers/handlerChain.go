@@ -75,7 +75,7 @@ func (hc *HandlerChain) WithWaitGroup(wg *sync.WaitGroup) *HandlerChain {
 	return hc
 }
 
-func (hc *HandlerChain) Run(u tele.Update, jobs chan *publishEnvelope, waiters *sync.Map, mirrorID string) *e.ErrorInfo {
+func (hc *HandlerChain) Run(u tele.Update, jobs chan *PublishEnvelope, waiters *sync.Map, mirrorID string) *e.ErrorInfo {
 	ctx, cancel := context.WithTimeout(context.Background(), hc.timeout)
 	defer cancel()
 

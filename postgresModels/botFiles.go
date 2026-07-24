@@ -8,7 +8,7 @@ import (
 	"github.com/go-pg/pg/v10/orm"
 )
 
-type MirrorFile struct {
+type BotFile struct {
 	ID int `pg:"id,pk"`
 
 	MirrorID int     `pg:"mirror_id,unique:mirror_file"`
@@ -26,7 +26,7 @@ func FindMirrorFileID(db orm.DB, mirrorID int, fileKey string) (string, *e.Error
 		return "", e.Nil()
 	}
 
-	file := &MirrorFile{}
+	file := &BotFile{}
 	err := db.Model(file).
 		Where("mirror_id = ?", mirrorID).
 		Where("file_key = ?", fileKey).
@@ -45,7 +45,7 @@ func UpsertMirrorFileID(db orm.DB, mirrorID int, fileKey string, fileID string, 
 		return e.Nil()
 	}
 
-	file := &MirrorFile{
+	file := &BotFile{
 		MirrorID:  mirrorID,
 		FileKey:   fileKey,
 		FileID:    fileID,

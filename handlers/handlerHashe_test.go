@@ -14,7 +14,7 @@ import (
 )
 
 func TestEmitAlbumPublishesEnvelope(t *testing.T) {
-	jobs := make(chan *publishEnvelope, 1)
+	jobs := make(chan *PublishEnvelope, 1)
 	waiters := &sync.Map{}
 	hashe := HandlerChainHashe{}.Init(jobs, waiters, "run-1")
 
@@ -30,12 +30,12 @@ func TestEmitAlbumPublishesEnvelope(t *testing.T) {
 	}
 
 	job := <-jobs
-	if job.routingKey != "telegram.message.send" {
-		t.Fatalf("expected routing key %q, got %q", "telegram.message.send", job.routingKey)
+	if job.RoutingKey != "telegram.message.send" {
+		t.Fatalf("expected routing key %q, got %q", "telegram.message.send", job.RoutingKey)
 	}
 
 	var request telegram.OutgoingRequest
-	if err := json.Unmarshal(job.body, &request); err != nil {
+	if err := json.Unmarshal(job.Body, &request); err != nil {
 		t.Fatalf("unmarshal outgoing request: %v", err)
 	}
 	if request.Kind != telegram.OutgoingRequestKindAlbum {
@@ -47,7 +47,7 @@ func TestEmitAlbumPublishesEnvelope(t *testing.T) {
 }
 
 func TestEmitAlbumWaitReturnsSentAlbum(t *testing.T) {
-	jobs := make(chan *publishEnvelope, 1)
+	jobs := make(chan *PublishEnvelope, 1)
 	waiters := &sync.Map{}
 	hashe := HandlerChainHashe{}.Init(jobs, waiters, "run-2")
 
@@ -58,9 +58,9 @@ func TestEmitAlbumWaitReturnsSentAlbum(t *testing.T) {
 
 	go func() {
 		job := <-jobs
-		value, ok := waiters.Load(job.correlationID)
+		value, ok := waiters.Load(job.CorrelationID)
 		if !ok {
-			t.Errorf("waiter for correlation %q not found", job.correlationID)
+			t.Errorf("waiter for correlation %q not found", job.CorrelationID)
 			return
 		}
 		replyCh, ok := value.(chan *SendResult)
@@ -69,7 +69,7 @@ func TestEmitAlbumWaitReturnsSentAlbum(t *testing.T) {
 			return
 		}
 		replyCh <- &SendResult{
-			CorrelationID: job.correlationID,
+			CorrelationID: job.CorrelationID,
 			IsSuccess:     true,
 			SentAlbum:     want,
 		}
@@ -96,7 +96,7 @@ func TestEmitAlbumWaitReturnsSentAlbum(t *testing.T) {
 }
 
 func TestEmitEditMessagePublishesEnvelope(t *testing.T) {
-	jobs := make(chan *publishEnvelope, 1)
+	jobs := make(chan *PublishEnvelope, 1)
 	waiters := &sync.Map{}
 	hashe := HandlerChainHashe{}.Init(jobs, waiters, "run-3")
 
@@ -109,12 +109,12 @@ func TestEmitEditMessagePublishesEnvelope(t *testing.T) {
 	}
 
 	job := <-jobs
-	if job.routingKey != "telegram.message.edit" {
-		t.Fatalf("expected routing key %q, got %q", "telegram.message.edit", job.routingKey)
+	if job.RoutingKey != "telegram.message.edit" {
+		t.Fatalf("expected routing key %q, got %q", "telegram.message.edit", job.RoutingKey)
 	}
 
 	var request telegram.OutgoingRequest
-	if err := json.Unmarshal(job.body, &request); err != nil {
+	if err := json.Unmarshal(job.Body, &request); err != nil {
 		t.Fatalf("unmarshal outgoing request: %v", err)
 	}
 	if request.Kind != telegram.OutgoingRequestKindEdit {
@@ -126,7 +126,7 @@ func TestEmitEditMessagePublishesEnvelope(t *testing.T) {
 }
 
 func TestEmitDeleteMessageWaitReturnsDeletedMessage(t *testing.T) {
-	jobs := make(chan *publishEnvelope, 1)
+	jobs := make(chan *PublishEnvelope, 1)
 	waiters := &sync.Map{}
 	hashe := HandlerChainHashe{}.Init(jobs, waiters, "run-4")
 	want := &tele.Message{ID: 16, Chat: &tele.Chat{ID: 777}}
@@ -134,7 +134,7 @@ func TestEmitDeleteMessageWaitReturnsDeletedMessage(t *testing.T) {
 	go func() {
 		job := <-jobs
 		var request telegram.OutgoingRequest
-		if err := json.Unmarshal(job.body, &request); err != nil {
+		if err := json.Unmarshal(job.Body, &request); err != nil {
 			t.Errorf("unmarshal outgoing request: %v", err)
 			return
 		}
@@ -142,9 +142,9 @@ func TestEmitDeleteMessageWaitReturnsDeletedMessage(t *testing.T) {
 			t.Errorf("expected kind %q, got %q", telegram.OutgoingRequestKindDelete, request.Kind)
 			return
 		}
-		value, ok := waiters.Load(job.correlationID)
+		value, ok := waiters.Load(job.CorrelationID)
 		if !ok {
-			t.Errorf("waiter for correlation %q not found", job.correlationID)
+			t.Errorf("waiter for correlation %q not found", job.CorrelationID)
 			return
 		}
 		replyCh, ok := value.(chan *SendResult)
@@ -153,7 +153,7 @@ func TestEmitDeleteMessageWaitReturnsDeletedMessage(t *testing.T) {
 			return
 		}
 		replyCh <- &SendResult{
-			CorrelationID: job.correlationID,
+			CorrelationID: job.CorrelationID,
 			IsSuccess:     true,
 			SentMessage:   want,
 		}
@@ -172,7 +172,7 @@ func TestEmitDeleteMessageWaitReturnsDeletedMessage(t *testing.T) {
 }
 
 func TestEmitCallbackPublishesEnvelope(t *testing.T) {
-	jobs := make(chan *publishEnvelope, 1)
+	jobs := make(chan *PublishEnvelope, 1)
 	waiters := &sync.Map{}
 	hashe := HandlerChainHashe{}.Init(jobs, waiters, "run-cb")
 
@@ -180,11 +180,11 @@ func TestEmitCallbackPublishesEnvelope(t *testing.T) {
 		t.Fatalf("emit callback: %v", err)
 	}
 	job := <-jobs
-	if job.routingKey != "telegram.message.callback" {
-		t.Fatalf("rk want telegram.message.callback got %s", job.routingKey)
+	if job.RoutingKey != "telegram.message.callback" {
+		t.Fatalf("rk want telegram.message.callback got %s", job.RoutingKey)
 	}
 	var request telegram.OutgoingRequest
-	if err := json.Unmarshal(job.body, &request); err != nil {
+	if err := json.Unmarshal(job.Body, &request); err != nil {
 		t.Fatal(err)
 	}
 	if request.Kind != telegram.OutgoingRequestKindCallback {

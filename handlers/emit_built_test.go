@@ -14,7 +14,7 @@ import (
 )
 
 func TestEmitBuiltPublishesResolvedMessage(t *testing.T) {
-	jobs := make(chan *publishEnvelope, 1)
+	jobs := make(chan *PublishEnvelope, 1)
 	waiters := &sync.Map{}
 	hashe := HandlerChainHashe{}.Init(jobs, waiters, "run-built")
 
@@ -35,7 +35,7 @@ func TestEmitBuiltPublishesResolvedMessage(t *testing.T) {
 
 	job := <-jobs
 	var request telegram.OutgoingRequest
-	if err := json.Unmarshal(job.body, &request); err != nil {
+	if err := json.Unmarshal(job.Body, &request); err != nil {
 		t.Fatalf("unmarshal outgoing request: %v", err)
 	}
 	if request.Message == nil || request.Message.Photo == nil {
@@ -53,7 +53,7 @@ func TestEmitBuiltPublishesResolvedMessage(t *testing.T) {
 }
 
 func TestEmitBuiltMirrorUsesEmitWait(t *testing.T) {
-	jobs := make(chan *publishEnvelope, 1)
+	jobs := make(chan *PublishEnvelope, 1)
 	waiters := &sync.Map{}
 	hashe := HandlerChainHashe{}.Init(jobs, waiters, "run-built-mirror", "1")
 
@@ -66,9 +66,9 @@ func TestEmitBuiltMirrorUsesEmitWait(t *testing.T) {
 
 	go func() {
 		job := <-jobs
-		value, ok := waiters.Load(job.correlationID)
+		value, ok := waiters.Load(job.CorrelationID)
 		if !ok {
-			t.Errorf("waiter for correlation %q not found", job.correlationID)
+			t.Errorf("waiter for correlation %q not found", job.CorrelationID)
 			return
 		}
 		replyCh, ok := value.(chan *SendResult)
@@ -77,7 +77,7 @@ func TestEmitBuiltMirrorUsesEmitWait(t *testing.T) {
 			return
 		}
 		replyCh <- &SendResult{
-			CorrelationID: job.correlationID,
+			CorrelationID: job.CorrelationID,
 			IsSuccess:     true,
 			SentMessage: &tele.Message{
 				Animation: &tele.Animation{File: tele.File{FileID: "fresh-id"}},

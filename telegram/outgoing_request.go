@@ -1,6 +1,8 @@
 package telegram
 
 import (
+	"encoding/json"
+
 	tele "gopkg.in/telebot.v4"
 )
 
@@ -14,6 +16,7 @@ const (
 	OutgoingRequestKindCallback OutgoingRequestKind = "callback_query"
 	OutgoingRequestKindPin      OutgoingRequestKind = "pin_message"
 	OutgoingRequestKindUnpin    OutgoingRequestKind = "unpin_message"
+	OutgoingRequestKindRawAPI   OutgoingRequestKind = "raw_api"
 )
 
 type OutgoingRequest struct {
@@ -31,6 +34,9 @@ type OutgoingRequest struct {
 
 	// PinSilent toggles silent pinning (no notification). Only used for the pin_message kind.
 	PinSilent bool `json:"pin_silent,omitempty"`
+
+	RawMethod  string          `json:"raw_method,omitempty"`
+	RawPayload json.RawMessage `json:"raw_payload,omitempty"`
 }
 
 func NewOutgoingMessageRequest(msg *tele.Message, parseModeEnabled bool) *OutgoingRequest {
@@ -90,6 +96,14 @@ func NewOutgoingUnpinRequest(msg *tele.Message) *OutgoingRequest {
 	return &OutgoingRequest{
 		Kind:    OutgoingRequestKindUnpin,
 		Message: msg,
+	}
+}
+
+func NewOutgoingRawAPIRequest(method string, payload json.RawMessage) *OutgoingRequest {
+	return &OutgoingRequest{
+		Kind:       OutgoingRequestKindRawAPI,
+		RawMethod:  method,
+		RawPayload: payload,
 	}
 }
 

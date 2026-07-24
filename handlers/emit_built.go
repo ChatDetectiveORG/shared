@@ -15,6 +15,8 @@ import (
 // EmitBuilt resolves mirror file assets, builds the message and sends it.
 // For mirror bots it always waits for the send result so stale file_id values can be re-uploaded
 // and cached for the mirror.
+
+// Deprecated: Use Build instead
 func (hch *HandlerChainHashe) EmitBuilt(
 	ctx context.Context,
 	db orm.DB,

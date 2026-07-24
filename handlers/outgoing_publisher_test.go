@@ -14,7 +14,7 @@ import (
 )
 
 func TestOutgoingPublisherNewHasheEmit(t *testing.T) {
-	jobs := make(chan *publishEnvelope, 1)
+	jobs := make(chan *PublishEnvelope, 1)
 	waiters := &sync.Map{}
 	pub := &OutgoingPublisher{
 		jobs:    jobs,
@@ -32,7 +32,7 @@ func TestOutgoingPublisherNewHasheEmit(t *testing.T) {
 
 	job := <-jobs
 	var request telegram.OutgoingRequest
-	if err := json.Unmarshal(job.body, &request); err != nil {
+	if err := json.Unmarshal(job.Body, &request); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if request.Message == nil || request.Message.Chat.ID != 42 {
@@ -41,7 +41,7 @@ func TestOutgoingPublisherNewHasheEmit(t *testing.T) {
 }
 
 func TestOutgoingPublisherEmitWait(t *testing.T) {
-	jobs := make(chan *publishEnvelope, 1)
+	jobs := make(chan *PublishEnvelope, 1)
 	waiters := &sync.Map{}
 	pub := &OutgoingPublisher{
 		jobs:    jobs,
@@ -54,14 +54,14 @@ func TestOutgoingPublisherEmitWait(t *testing.T) {
 
 	go func() {
 		job := <-jobs
-		value, ok := waiters.Load(job.correlationID)
+		value, ok := waiters.Load(job.CorrelationID)
 		if !ok {
-			t.Errorf("waiter missing for %q", job.correlationID)
+			t.Errorf("waiter missing for %q", job.CorrelationID)
 			return
 		}
 		replyCh := value.(chan *SendResult)
 		replyCh <- &SendResult{
-			CorrelationID: job.correlationID,
+			CorrelationID: job.CorrelationID,
 			IsSuccess:     true,
 			SentMessage:   want,
 		}

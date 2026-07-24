@@ -33,7 +33,7 @@ type OutgoingPublisher struct {
 	podID              string
 	outgoingExchange   string
 	sendResultExchange string
-	jobs               chan *publishEnvelope
+	jobs               chan *PublishEnvelope
 	waiters            *sync.Map
 	errorChannel       chan *e.ErrorInfo
 
@@ -73,7 +73,7 @@ func NewOutgoingPublisher(cfg OutgoingConfig) (*OutgoingPublisher, *e.ErrorInfo)
 		podID:              podID,
 		outgoingExchange:   outEx,
 		sendResultExchange: inEx,
-		jobs:               make(chan *publishEnvelope, buf),
+		jobs:               make(chan *PublishEnvelope, buf),
 		waiters:            &sync.Map{},
 		errorChannel:       cfg.ErrorChannel,
 		sendResultConsumers: map[int]bool{},
@@ -168,7 +168,7 @@ func (p *OutgoingPublisher) NewHashe(mirrorID ...string) *HandlerChainHashe {
 }
 
 // Jobs exposes the internal publish queue (Router endpoints share the same channel).
-func (p *OutgoingPublisher) Jobs() chan *publishEnvelope {
+func (p *OutgoingPublisher) Jobs() chan *PublishEnvelope {
 	return p.jobs
 }
 

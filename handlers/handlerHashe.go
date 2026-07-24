@@ -17,14 +17,14 @@ import (
 // HandlerChainHashe — контекст одного прогона цепочки: отправка в exchange и произвольные аргументы между шагами.
 type HandlerChainHashe struct {
 	args             map[string]any
-	jobs             chan *publishEnvelope
+	jobs             chan *PublishEnvelope
 	waiters          *sync.Map
 	runID            string
 	mirrorID         string
 	parseModeEnabled bool
 }
 
-func (hch HandlerChainHashe) Init(jobs chan *publishEnvelope, waiters *sync.Map, runID string, mirrorID ...string) *HandlerChainHashe {
+func (hch HandlerChainHashe) Init(jobs chan *PublishEnvelope, waiters *sync.Map, runID string, mirrorID ...string) *HandlerChainHashe {
 	resolvedMirrorID := ""
 	if len(mirrorID) > 0 {
 		resolvedMirrorID = mirrorID[0]
@@ -79,10 +79,10 @@ func (hch *HandlerChainHashe) enqueue(routingKey string, body []byte, correlatio
 	}
 	log.Printf("trace=%s %s rk=%s", correlationID, action, routingKey)
 	select {
-	case hch.jobs <- &publishEnvelope{
-		routingKey:    routingKey,
-		body:          body,
-		correlationID: correlationID,
+	case hch.jobs <- &PublishEnvelope{
+		RoutingKey:    routingKey,
+		Body:          body,
+		CorrelationID: correlationID,
 	}:
 		return e.Nil()
 	default:
@@ -299,6 +299,53 @@ func (hch *HandlerChainHashe) EmitAlbumWait(ctx context.Context, routingKey stri
 		return []*tele.Message{sr.SentMessage}, e.Nil()
 	}
 	return nil, e.NewError("empty sent album", "EmitAlbumWait").WithSeverity(e.Warning)
+}
+
+// EmitRaw publishes a Telegram Bot API call via message-sender.
+func (hch *HandlerChainHashe) EmitRaw(routingKey, method string, payload json.RawMessage) *e.ErrorInfo {
+	body, err := hch.marshalOutgoing(telegram.NewOutgoingRawAPIRequest(method, payload))
+	if e.IsNonNil(err) {
+		return err
+	}
+	return hch.enqueue(routingKey, body, uuid.New().String(), "handlers.emit_raw")
+}
+
+// EmitRawWait waits for a single-message raw API response.
+func (hch *HandlerChainHashe) EmitRawWait(ctx context.Context, routingKey, method string, payload json.RawMessage) (*tele.Message, *e.ErrorInfo) {
+	body, err := hch.marshalOutgoing(telegram.NewOutgoingRawAPIRequest(method, payload))
+	if e.IsNonNil(err) {
+		return nil, err
+	}
+	sr, waitErr := hch.waitResult(ctx, routingKey, body, "handlers.emit_raw_wait")
+	if e.IsNonNil(waitErr) {
+		if sr != nil {
+			return sr.SentMessage, waitErr
+		}
+		return nil, waitErr
+	}
+	return sr.SentMessage, e.Nil()
+}
+
+// EmitRawAlbumWait waits for a sendMediaGroup raw API response.
+func (hch *HandlerChainHashe) EmitRawAlbumWait(ctx context.Context, routingKey, method string, payload json.RawMessage) ([]*tele.Message, *e.ErrorInfo) {
+	body, err := hch.marshalOutgoing(telegram.NewOutgoingRawAPIRequest(method, payload))
+	if e.IsNonNil(err) {
+		return nil, err
+	}
+	sr, waitErr := hch.waitResult(ctx, routingKey, body, "handlers.emit_raw_album_wait")
+	if e.IsNonNil(waitErr) {
+		if sr != nil && len(sr.SentAlbum) > 0 {
+			return sr.SentAlbum, waitErr
+		}
+		return nil, waitErr
+	}
+	if len(sr.SentAlbum) > 0 {
+		return sr.SentAlbum, e.Nil()
+	}
+	if sr.SentMessage != nil {
+		return []*tele.Message{sr.SentMessage}, e.Nil()
+	}
+	return nil, e.NewError("empty raw album result", "EmitRawAlbumWait").WithSeverity(e.Warning)
 }
 
 func (hch *HandlerChainHashe) Add(name string, value interface{}) *HandlerChainHashe {
